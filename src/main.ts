@@ -12,12 +12,12 @@ import { type Lang, type T, getT } from "./i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface StarredItem {
+export interface StarredItem {
   starred_at?: string;
   repo?: GitHubRepo;
 }
 
-interface GitHubRepo {
+export interface GitHubRepo {
   full_name: string;
   html_url: string;
   homepage: string | null;
@@ -34,7 +34,7 @@ interface GitHubRepo {
   fork?: boolean;
 }
 
-interface Profile {
+export interface Profile {
   id: string;
   name: string;
   githubToken: string;
@@ -69,7 +69,7 @@ interface RepoNotesSettings {
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
-function defaultProfile(id: string, name: string): Profile {
+export function defaultProfile(id: string, name: string): Profile {
   return {
     id, name, githubToken: "",
     syncStars: true, starsFolder: "GitHub Stars", starsFolderParent: "",
@@ -404,46 +404,14 @@ export default class RepoNotesPlugin extends Plugin {
   // ─── Note Builder ────────────────────────────────────────────────────────────
 
   buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
-    const repo = (item.repo ?? item) as GitHubRepo;
-    const starredAt = item.starred_at ?? null;
-    const now = new Date().toISOString().split("T")[0];
-    const fmtDate = (iso: string | null | undefined) => iso ? iso.split("T")[0] : null;
-    const lastUpdated = fmtDate(repo.pushed_at ?? repo.updated_at);
+    return buildNote(profile, item, commitCount, readmeSummary, readmeRaw, mode);
+  }
 
-    const fm: string[] = ["---"];
-    fm.push(`source: ${mode === "mine" ? "my-repo" : "starred"}`);
-    fm.push(`profile: "${profile.name}"`);
-    fm.push(`repo: "${repo.full_name}"`);
-    fm.push(`url: "${repo.html_url}"`);
-    if (repo.homepage) fm.push(`website: "${repo.homepage}"`);
-    if (profile.includeDescription && repo.description)
-      fm.push(`description: "${repo.description.replace(/"/g, '\\"')}"`);
-    if (profile.includeStats) {
-      fm.push(`language: ${repo.language ?? "Unknown"}`);
-      fm.push(`stars: ${repo.stargazers_count ?? 0}`);
-      fm.push(`forks: ${repo.forks_count ?? 0}`);
-    }
-    if (profile.includeCommitCount && commitCount >= 0) fm.push(`commits: ${commitCount}`);
-    if (profile.includeLastUpdated && lastUpdated) fm.push(`last_updated: ${lastUpdated}`);
-    if (profile.includeStarredDate && starredAt) fm.push(`starred_at: ${starredAt.split("T")[0]}`);
-    fm.push(`synced_at: ${now}`);
-    if (profile.includeTopics && repo.topics?.length)
-      fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
-    fm.push("---\n");
-
-    const lines: string[] = [];
-    if (mode === "mine") lines.push(`> 🔒 ${repo.private ? "Private" : "Public"}\n`);
-    if (profile.includeReadmeExcerpt && readmeSummary) { lines.push("## Summary"); lines.push(readmeSummary + "\n"); }
-    if (profile.includeReadmeRaw && readmeRaw) { lines.push("## README"); lines.push(readmeRaw + "\n"); }
-
-    return fm.join("\n") + lines.join("\n");
+  sanitizeFilename(name: string): string {
+    return sanitizeFilename(name);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-  sanitizeFilename(name: string): string {
-    return name.replace(/[\\/:*?"<>|#^[\]]/g, "-");
-  }
 
   async ensureFolder(path: string): Promise<void> {
     const parts = path.split("/").filter(Boolean);
@@ -455,6 +423,48 @@ export default class RepoNotesPlugin extends Plugin {
       }
     }
   }
+}
+
+// ─── Pure utility functions (exported for testing) ────────────────────────────
+
+export function buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
+  const repo = (item.repo ?? item) as GitHubRepo;
+  const starredAt = item.starred_at ?? null;
+  const now = new Date().toISOString().split("T")[0];
+  const fmtDate = (iso: string | null | undefined) => iso ? iso.split("T")[0] : null;
+  const lastUpdated = fmtDate(repo.pushed_at ?? repo.updated_at);
+
+  const fm: string[] = ["---"];
+  fm.push(`source: ${mode === "mine" ? "my-repo" : mode === "org" ? "org-repo" : "starred"}`);
+  fm.push(`profile: "${profile.name}"`);
+  fm.push(`repo: "${repo.full_name}"`);
+  fm.push(`url: "${repo.html_url}"`);
+  if (repo.homepage) fm.push(`website: "${repo.homepage}"`);
+  if (profile.includeDescription && repo.description)
+    fm.push(`description: "${repo.description.replace(/"/g, '\\"')}"`);
+  if (profile.includeStats) {
+    fm.push(`language: ${repo.language ?? "Unknown"}`);
+    fm.push(`stars: ${repo.stargazers_count ?? 0}`);
+    fm.push(`forks: ${repo.forks_count ?? 0}`);
+  }
+  if (profile.includeCommitCount && commitCount >= 0) fm.push(`commits: ${commitCount}`);
+  if (profile.includeLastUpdated && lastUpdated) fm.push(`last_updated: ${lastUpdated}`);
+  if (profile.includeStarredDate && starredAt) fm.push(`starred_at: ${starredAt.split("T")[0]}`);
+  fm.push(`synced_at: ${now}`);
+  if (profile.includeTopics && repo.topics?.length)
+    fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
+  fm.push("---\n");
+
+  const lines: string[] = [];
+  if (mode === "mine") lines.push(`> 🔒 ${repo.private ? "Private" : "Public"}\n`);
+  if (profile.includeReadmeExcerpt && readmeSummary) { lines.push("## Summary"); lines.push(readmeSummary + "\n"); }
+  if (profile.includeReadmeRaw && readmeRaw) { lines.push("## README"); lines.push(readmeRaw + "\n"); }
+
+  return fm.join("\n") + lines.join("\n");
+}
+
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[\\/:*?"<>|#^[\]]/g, "-");
 }
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────

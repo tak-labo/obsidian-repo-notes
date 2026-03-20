@@ -1,0 +1,212 @@
+import { describe, it, expect } from "vitest";
+import { sanitizeFilename, buildNote, defaultProfile } from "../main";
+import type { StarredItem, GitHubRepo } from "../main";
+
+// ─── テスト用フィクスチャ ─────────────────────────────────────────────────────
+
+const mockRepo: GitHubRepo = {
+  full_name: "owner/my-repo",
+  html_url: "https://github.com/owner/my-repo",
+  homepage: null,
+  description: "A test repository",
+  language: "TypeScript",
+  stargazers_count: 100,
+  forks_count: 10,
+  topics: ["obsidian", "plugin"],
+  default_branch: "main",
+  pushed_at: "2024-06-01T12:00:00Z",
+  updated_at: "2024-06-01T12:00:00Z",
+  created_at: "2023-01-01T00:00:00Z",
+  private: false,
+  fork: false,
+};
+
+const mockStarredItem: StarredItem = {
+  starred_at: "2024-11-15T00:00:00Z",
+  repo: mockRepo,
+};
+
+// ─── sanitizeFilename ─────────────────────────────────────────────────────────
+
+describe("sanitizeFilename", () => {
+  it("通常のファイル名はそのまま返す", () => {
+    expect(sanitizeFilename("hello-world")).toBe("hello-world");
+    expect(sanitizeFilename("my_repo")).toBe("my_repo");
+  });
+
+  it("スラッシュをハイフンに変換する", () => {
+    expect(sanitizeFilename("owner/repo")).toBe("owner-repo");
+  });
+
+  it("Windowsの禁止文字をハイフンに変換する", () => {
+    expect(sanitizeFilename("repo:name")).toBe("repo-name");
+    expect(sanitizeFilename("repo*name")).toBe("repo-name");
+    expect(sanitizeFilename('repo"name')).toBe("repo-name");
+    expect(sanitizeFilename("repo<name>")).toBe("repo-name-");
+    expect(sanitizeFilename("repo|name")).toBe("repo-name");
+    expect(sanitizeFilename("repo?name")).toBe("repo-name");
+  });
+
+  it("バックスラッシュをハイフンに変換する", () => {
+    expect(sanitizeFilename("repo\\name")).toBe("repo-name");
+  });
+
+  it("Obsidian特有の禁止文字をハイフンに変換する", () => {
+    expect(sanitizeFilename("repo#name")).toBe("repo-name");
+    expect(sanitizeFilename("repo^name")).toBe("repo-name");
+    expect(sanitizeFilename("repo[name]")).toBe("repo-name-");
+  });
+});
+
+// ─── defaultProfile ───────────────────────────────────────────────────────────
+
+describe("defaultProfile", () => {
+  it("指定したidとnameでプロファイルを生成する", () => {
+    const p = defaultProfile("abc123", "Personal");
+    expect(p.id).toBe("abc123");
+    expect(p.name).toBe("Personal");
+  });
+
+  it("デフォルト値が正しく設定されている", () => {
+    const p = defaultProfile("id", "name");
+    expect(p.githubToken).toBe("");
+    expect(p.syncStars).toBe(true);
+    expect(p.syncMyRepos).toBe(false);
+    expect(p.starsFolder).toBe("GitHub Stars");
+    expect(p.myReposFolder).toBe("My Repos");
+    expect(p.myReposIncludeForks).toBe(false);
+    expect(p.myReposIncludePrivate).toBe(true);
+    expect(p.includeDescription).toBe(true);
+    expect(p.includeTopics).toBe(true);
+    expect(p.includeStats).toBe(true);
+    expect(p.overwriteExisting).toBe(true);
+    expect(p.orgNames).toEqual([]);
+  });
+});
+
+// ─── buildNote ────────────────────────────────────────────────────────────────
+
+describe("buildNote", () => {
+  const profile = defaultProfile("test-id", "Personal");
+
+  it("YAMLフロントマターを含むMarkdownを生成する", () => {
+    const note = buildNote(profile, mockStarredItem);
+    expect(note).toContain("---");
+    expect(note).toContain('repo: "owner/my-repo"');
+    expect(note).toContain('url: "https://github.com/owner/my-repo"');
+    expect(note).toContain('profile: "Personal"');
+  });
+
+  it("デフォルトはstarsモードでsource: starredを出力する", () => {
+    const note = buildNote(profile, mockStarredItem);
+    expect(note).toContain("source: starred");
+  });
+
+  it("mineモードでsource: my-repoを出力する", () => {
+    const note = buildNote(profile, mockStarredItem, -1, null, null, "mine");
+    expect(note).toContain("source: my-repo");
+  });
+
+  it("orgモードでsource: org-repoを出力する", () => {
+    const note = buildNote(profile, mockStarredItem, -1, null, null, "org");
+    expect(note).toContain("source: org-repo");
+  });
+
+  it("includeStats=trueで言語・Star数・Fork数を含む", () => {
+    const p = { ...profile, includeStats: true };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).toContain("language: TypeScript");
+    expect(note).toContain("stars: 100");
+    expect(note).toContain("forks: 10");
+  });
+
+  it("includeStats=falseで言語・Star数・Fork数を含まない", () => {
+    const p = { ...profile, includeStats: false };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).not.toContain("language:");
+    expect(note).not.toContain("stars:");
+    expect(note).not.toContain("forks:");
+  });
+
+  it("includeTopics=trueでトピックをタグとして含む", () => {
+    const p = { ...profile, includeTopics: true };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).toContain('tags: ["obsidian", "plugin"]');
+  });
+
+  it("includeTopics=falseでタグを含まない", () => {
+    const p = { ...profile, includeTopics: false };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).not.toContain("tags:");
+  });
+
+  it("includeDescription=trueで説明文を含む", () => {
+    const p = { ...profile, includeDescription: true };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).toContain('description: "A test repository"');
+  });
+
+  it("includeDescription=falseで説明文を含まない", () => {
+    const p = { ...profile, includeDescription: false };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).not.toContain("description:");
+  });
+
+  it("commitCountが0以上のとき commits を含む", () => {
+    const p = { ...profile, includeCommitCount: true };
+    const note = buildNote(p, mockStarredItem, 42);
+    expect(note).toContain("commits: 42");
+  });
+
+  it("commitCountが-1のとき commits を含まない", () => {
+    const p = { ...profile, includeCommitCount: true };
+    const note = buildNote(p, mockStarredItem, -1);
+    expect(note).not.toContain("commits:");
+  });
+
+  it("includeStarredDate=trueでstarred_atを含む", () => {
+    const p = { ...profile, includeStarredDate: true };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).toContain("starred_at: 2024-11-15");
+  });
+
+  it("includeLastUpdated=trueでlast_updatedを含む", () => {
+    const p = { ...profile, includeLastUpdated: true };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).toContain("last_updated: 2024-06-01");
+  });
+
+  it("説明文中のダブルクォートをエスケープする", () => {
+    const repoWithQuote = { ...mockRepo, description: 'He said "hello"' };
+    const item: StarredItem = { starred_at: undefined, repo: repoWithQuote };
+    const p = { ...profile, includeDescription: true };
+    const note = buildNote(p, item);
+    expect(note).toContain('description: "He said \\"hello\\""');
+  });
+
+  it("homepageがあればwebsiteを含む", () => {
+    const repoWithHome = { ...mockRepo, homepage: "https://example.com" };
+    const item: StarredItem = { repo: repoWithHome };
+    const note = buildNote(profile, item);
+    expect(note).toContain('website: "https://example.com"');
+  });
+
+  it("mineモードでPrivate/Publicバッジを含む", () => {
+    const note = buildNote(profile, mockStarredItem, -1, null, null, "mine");
+    expect(note).toContain("> 🔒 Public");
+  });
+
+  it("READMEサマリーを含む", () => {
+    const p = { ...profile, includeReadmeExcerpt: true };
+    const note = buildNote(p, mockStarredItem, -1, "This is a summary.", null);
+    expect(note).toContain("## Summary");
+    expect(note).toContain("This is a summary.");
+  });
+
+  it("README全文を含む", () => {
+    const p = { ...profile, includeReadmeRaw: true };
+    const note = buildNote(p, mockStarredItem, -1, null, "# Full README");
+    expect(note).toContain("## README");
+    expect(note).toContain("# Full README");
+  });
+});
