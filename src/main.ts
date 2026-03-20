@@ -62,7 +62,7 @@ interface RepoNotesSettings {
   profiles: Profile[];
   anthropicApiKey: string;
   readmeSummaryLang: string;
-  uiLang: Lang;
+  uiLang: "auto" | Lang;
   autoSyncOnStartup: boolean;
   autoSyncProfileId: string;
   summaryProvider: "anthropic" | "openai-compatible";
@@ -89,7 +89,7 @@ export function defaultProfile(id: string, name: string): Profile {
 const DEFAULT_SETTINGS: RepoNotesSettings = {
   profiles: [defaultProfile("default", "Personal")],
   anthropicApiKey: "", readmeSummaryLang: "en",
-  uiLang: "en",
+  uiLang: "auto",
   autoSyncOnStartup: false, autoSyncProfileId: "",
   summaryProvider: "anthropic",
   summaryBaseUrl: "",
@@ -106,7 +106,13 @@ function genId(): string {
 export default class RepoNotesPlugin extends Plugin {
   settings: RepoNotesSettings;
 
-  get t(): T { return getT(this.settings.uiLang); }
+  get t(): T {
+    if (this.settings.uiLang === "auto") {
+      const obsidianLang = (window as any).moment?.locale?.() ?? "en";
+      return getT(obsidianLang.startsWith("ja") ? "ja" : "en");
+    }
+    return getT(this.settings.uiLang);
+  }
 
   async onload() {
     await this.loadSettings();
@@ -181,6 +187,10 @@ export default class RepoNotesPlugin extends Plugin {
     }
     if (!this.settings.summaryProvider) {
       this.settings.summaryProvider = "anthropic";
+    }
+    // Migrate: if uiLang was not explicitly saved (old default "en"), reset to "auto"
+    if (!saved || !(saved as any).uiLang) {
+      this.settings.uiLang = "auto";
     }
   }
 
@@ -654,10 +664,10 @@ class RepoNotesSettingTab extends PluginSettingTab {
     // ── 言語設定（最上部）────────────────────────────────────────────────
     new Setting(containerEl).setName("Language / 言語")
       .addDropdown((d) =>
-        d.addOption("en", "English").addOption("ja", "日本語")
+        d.addOption("auto", "Auto (follow Obsidian)").addOption("en", "English").addOption("ja", "日本語")
           .setValue(this.plugin.settings.uiLang)
           .onChange(async (v) => {
-            this.plugin.settings.uiLang = v as Lang;
+            this.plugin.settings.uiLang = v as "auto" | Lang;
             await this.plugin.saveSettings();
             this.display();
           })
