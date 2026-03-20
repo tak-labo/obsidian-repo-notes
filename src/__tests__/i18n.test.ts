@@ -36,4 +36,38 @@ describe("getT", () => {
     expect(t.noticeNoToken("test")).toContain("test");
     expect(t.noticeError("ERR")).toContain("ERR");
   });
+
+  it("AIプロバイダー関連の英語キーが存在する", () => {
+    const t = getT("en");
+    expect(t.summaryProvider).toBe("AI provider");
+    expect(t.summaryProviderDesc).toBeTruthy();
+    expect(t.summaryBaseUrl).toBe("Base URL");
+    expect(t.summaryBaseUrlDesc).toBeTruthy();
+    expect(t.summaryBaseUrlPlaceholder).toBe("http://localhost:11434/v1");
+    expect(t.summaryModel).toBe("Model");
+    expect(t.summaryModelDesc).toBeTruthy();
+    expect(t.summaryModelPlaceholder).toBe("llama3.2");
+    expect(t.summaryApiKey).toBe("API key");
+    expect(t.summaryApiKeyDesc).toBeTruthy();
+    expect(t.summaryApiKeyPlaceholder).toBe("sk-...");
+    expect(t.showApiKey).toBe("Show");
+    expect(t.hideApiKey).toBe("Hide");
+  });
+
+  it("AIプロバイダー関連の日本語キーが存在する", () => {
+    const t = getT("ja");
+    expect(t.summaryProvider).toBe("AIプロバイダー");
+    expect(t.summaryBaseUrl).toBe("Base URL");
+    expect(t.summaryModel).toBe("モデル");
+    expect(t.summaryApiKey).toBe("API キー");
+    expect(t.showApiKey).toBe("表示");
+    expect(t.hideApiKey).toBe("非表示");
+  });
+
+  it("includeReadmeSummaryDescがAnthropicに依存しない文言になっている", () => {
+    const en = getT("en");
+    const ja = getT("ja");
+    expect(en.includeReadmeSummaryDesc).not.toContain("Anthropic");
+    expect(ja.includeReadmeSummaryDesc).not.toContain("Anthropic");
+  });
 });
