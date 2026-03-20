@@ -1,0 +1,32 @@
+name: Question / Help
+description: Ask a question about setup or usage
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before asking, please check the [README](https://github.com/tak-labo/obsidian-repo-notes/blob/main/README.md) for setup instructions.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What would you like to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (if relevant)
+      description: Obsidian version, plugin version, OS, AI provider, etc.
+      value: |
+        - Obsidian version:
+        - Plugin version:
+        - OS:
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you've tried
+      description: What have you already tried or looked at?
