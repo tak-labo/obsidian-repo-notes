@@ -65,6 +65,10 @@ interface RepoNotesSettings {
   uiLang: Lang;
   autoSyncOnStartup: boolean;
   autoSyncProfileId: string;
+  summaryProvider: "anthropic" | "openai-compatible";
+  summaryBaseUrl: string;
+  summaryModel: string;
+  summaryApiKey: string;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -87,6 +91,10 @@ const DEFAULT_SETTINGS: RepoNotesSettings = {
   anthropicApiKey: "", readmeSummaryLang: "en",
   uiLang: "en",
   autoSyncOnStartup: false, autoSyncProfileId: "",
+  summaryProvider: "anthropic",
+  summaryBaseUrl: "",
+  summaryModel: "",
+  summaryApiKey: "",
 };
 
 function genId(): string {
@@ -170,6 +178,9 @@ export default class RepoNotesPlugin extends Plugin {
     }
     if (!this.settings.profiles?.length) {
       this.settings.profiles = [defaultProfile("default", "Personal")];
+    }
+    if (!this.settings.summaryProvider) {
+      this.settings.summaryProvider = "anthropic";
     }
   }
 
@@ -263,7 +274,10 @@ export default class RepoNotesPlugin extends Plugin {
           if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
             readmeRaw = await this.fetchReadme(profile.githubToken, repo.full_name);
           }
-          if (profile.includeReadmeExcerpt && this.settings.anthropicApiKey && readmeRaw) {
+          const canSummarize = this.settings.summaryProvider === "openai-compatible"
+            ? !!(this.settings.summaryBaseUrl && this.settings.summaryModel)
+            : !!this.settings.anthropicApiKey;
+          if (profile.includeReadmeExcerpt && canSummarize && readmeRaw) {
             readmeSummary = await this.summarizeReadme(readmeRaw, repo.full_name);
           }
 
@@ -379,6 +393,13 @@ export default class RepoNotesPlugin extends Plugin {
   }
 
   private async summarizeReadme(readmeText: string, repoName: string): Promise<string | null> {
+    if (this.settings.summaryProvider === "openai-compatible") {
+      return this.summarizeReadmeOpenAI(readmeText, repoName);
+    }
+    return this.summarizeReadmeAnthropic(readmeText, repoName);
+  }
+
+  private async summarizeReadmeAnthropic(readmeText: string, repoName: string): Promise<string | null> {
     if (!this.settings.anthropicApiKey) return null;
     const lang = this.settings.readmeSummaryLang === "ja" ? "日本語" : "English";
     try {
@@ -398,6 +419,30 @@ export default class RepoNotesPlugin extends Plugin {
       });
       if (res.status !== 200) return null;
       return res.json?.content?.[0]?.text ?? null;
+    } catch { return null; }
+  }
+
+  private async summarizeReadmeOpenAI(readmeText: string, repoName: string): Promise<string | null> {
+    if (!this.settings.summaryBaseUrl || !this.settings.summaryModel) return null;
+    const lang = this.settings.readmeSummaryLang === "ja" ? "日本語" : "English";
+    const baseUrl = this.settings.summaryBaseUrl.replace(/\/$/, "");
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.settings.summaryApiKey) {
+      headers["authorization"] = `Bearer ${this.settings.summaryApiKey}`;
+    }
+    try {
+      const res = await requestUrl({
+        url: `${baseUrl}/chat/completions`,
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: this.settings.summaryModel,
+          max_tokens: 400,
+          messages: [{ role: "user", content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. No preamble.\n\n---\n${readmeText}` }],
+        }),
+      });
+      if (res.status !== 200) return null;
+      return res.json?.choices?.[0]?.message?.content ?? null;
     } catch { return null; }
   }
 
@@ -722,9 +767,33 @@ class RepoNotesSettingTab extends PluginSettingTab {
 
     // ── Shared ────────────────────────────────────────────────────────────
     containerEl.createEl("h3", { text: t.sectionShared });
-    new Setting(containerEl).setName(t.anthropicKey).setDesc(t.anthropicKeyDesc)
-      .addText((tx) => tx.setPlaceholder(t.anthropicKeyPlaceholder).setValue(this.plugin.settings.anthropicApiKey)
-        .onChange(async (v) => { this.plugin.settings.anthropicApiKey = v.trim(); await this.plugin.saveSettings(); }));
+    new Setting(containerEl).setName(t.summaryProvider).setDesc(t.summaryProviderDesc)
+      .addDropdown((d) =>
+        d.addOption("anthropic", "Anthropic (Claude)")
+         .addOption("openai-compatible", "OpenAI-compatible (Ollama, LM Studio, vLLM...)")
+         .setValue(this.plugin.settings.summaryProvider)
+         .onChange(async (v) => {
+           this.plugin.settings.summaryProvider = v as "anthropic" | "openai-compatible";
+           await this.plugin.saveSettings();
+           this.display();
+         })
+      );
+    if (this.plugin.settings.summaryProvider === "anthropic") {
+      new Setting(containerEl).setName(t.anthropicKey).setDesc(t.anthropicKeyDesc)
+        .addText((tx) => tx.setPlaceholder(t.anthropicKeyPlaceholder).setValue(this.plugin.settings.anthropicApiKey)
+          .onChange(async (v) => { this.plugin.settings.anthropicApiKey = v.trim(); await this.plugin.saveSettings(); }));
+    }
+    if (this.plugin.settings.summaryProvider === "openai-compatible") {
+      new Setting(containerEl).setName(t.summaryBaseUrl).setDesc(t.summaryBaseUrlDesc)
+        .addText((tx) => tx.setPlaceholder(t.summaryBaseUrlPlaceholder).setValue(this.plugin.settings.summaryBaseUrl)
+          .onChange(async (v) => { this.plugin.settings.summaryBaseUrl = v.trim(); await this.plugin.saveSettings(); }));
+      new Setting(containerEl).setName(t.summaryModel).setDesc(t.summaryModelDesc)
+        .addText((tx) => tx.setPlaceholder(t.summaryModelPlaceholder).setValue(this.plugin.settings.summaryModel)
+          .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); }));
+      new Setting(containerEl).setName(t.summaryApiKey).setDesc(t.summaryApiKeyDesc)
+        .addText((tx) => tx.setPlaceholder(t.summaryApiKeyPlaceholder).setValue(this.plugin.settings.summaryApiKey)
+          .onChange(async (v) => { this.plugin.settings.summaryApiKey = v.trim(); await this.plugin.saveSettings(); }));
+    }
     new Setting(containerEl).setName(t.summaryLang)
       .addDropdown((d) => d.addOption("en", "English").addOption("ja", "日本語")
         .setValue(this.plugin.settings.readmeSummaryLang)
