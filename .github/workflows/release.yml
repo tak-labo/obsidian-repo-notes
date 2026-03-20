@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build:
@@ -14,6 +15,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -30,10 +33,12 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
 
       - name: Verify manifest version matches tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
-          if [ "$MANIFEST_VERSION" != "${{ steps.version.outputs.version }}" ]; then
-            echo "manifest.json version ($MANIFEST_VERSION) does not match tag (${{ steps.version.outputs.version }})"
+          if [ "$MANIFEST_VERSION" != "$VERSION" ]; then
+            echo "manifest.json version ($MANIFEST_VERSION) does not match tag ($VERSION)"
             exit 1
           fi
 
@@ -51,3 +56,41 @@ jobs:
             styles.css
             repo-notes.zip
           generate_release_notes: true
+
+      - name: Update CHANGELOG.md and create PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          NOTES=$(gh release view "$VERSION" --json body -q .body)
+
+          {
+            echo "# Changelog"
+            echo ""
+            echo "## $VERSION ($DATE)"
+            echo ""
+            echo "$NOTES"
+            echo ""
+            echo "---"
+            echo ""
+            tail -n +2 CHANGELOG.md 2>/dev/null || true
+          } > CHANGELOG.tmp
+          mv CHANGELOG.tmp CHANGELOG.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+
+          BRANCH="chore/changelog-${VERSION}"
+          git checkout -b "$BRANCH"
+          git add CHANGELOG.md
+          git diff --cached --quiet && exit 0
+          git commit -m "CHANGELOG.mdを${VERSION}に更新"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: CHANGELOG.mdを${VERSION}に更新" \
+            --body "リリース ${VERSION} のCHANGELOG.mdを自動更新します。" \
+            --base main \
+            --head "$BRANCH"
