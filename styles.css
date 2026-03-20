@@ -1,0 +1,106 @@
+/* GitHub Stars Sync - Plugin Styles */
+
+.github-stars-modal {
+  padding: 0.5rem 0;
+  min-width: 480px;
+}
+
+.github-stars-modal h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gs-progress-wrap {
+  margin-bottom: 1rem;
+}
+
+.gs-status-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  min-height: 20px;
+}
+
+.gs-track {
+  height: 4px;
+  background: var(--background-modifier-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.gs-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--interactive-accent), #5BC4FF);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.gs-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+.gs-stat-card {
+  flex: 1;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.gs-stat-val {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--interactive-accent);
+  line-height: 1;
+}
+
+.gs-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gs-log {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 12px;
+  font-family: var(--font-monospace);
+  margin-bottom: 1rem;
+}
+
+.gs-log-line {
+  padding: 1px 0;
+  line-height: 1.8;
+}
+
+.gs-log-ok {
+  color: var(--color-green);
+}
+
+.gs-log-skip {
+  color: var(--text-muted);
+}
+
+.gs-log-err {
+  color: var(--color-red);
+}
+
+.gs-btn-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

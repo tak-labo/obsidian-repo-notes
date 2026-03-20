@@ -1,0 +1,11 @@
+{
+  "id": "repo-notes",
+  "name": "Repo Notes",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Import GitHub starred repos and your own repositories as structured Obsidian notes.",
+  "author": "Takahiro",
+  "authorUrl": "https://github.com/tak-labo",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}
