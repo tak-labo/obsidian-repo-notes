@@ -12,9 +12,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install          # 依存関係インストール
 npm run dev          # 開発用ウォッチモード（変更を自動ビルド）
 npm run build        # 型チェック(tsc -noEmit -skipLibCheck) + 本番ビルド
+npm test             # Vitest でユニットテストを実行
+npm run test:watch   # ウォッチモードでテストを実行
 ```
 
-テストフレームワークは存在しない。
+テストは **Vitest** で実装。`src/__tests__/` にテストファイル、`src/__mocks__/obsidian.ts` に Obsidian API のモックを配置。Docker で実行する場合は `docker compose run --rm test`。
 
 ### Vault へのシンボリックリンク（ライブ開発）
 
