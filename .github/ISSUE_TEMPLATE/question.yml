@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before asking, please check the [README](../../blob/main/README.md) for setup instructions.
+        Before asking, please check the [README](https://github.com/tak-labo/obsidian-repo-notes/blob/main/README.md) for setup instructions.
 
   - type: textarea
     id: question
