@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeFilename, buildNote, defaultProfile, checkCanSummarize } from "../main";
+import { sanitizeFilename, buildNote, defaultProfile, checkCanSummarize, resolveUiLang } from "../main";
 import type { StarredItem, GitHubRepo } from "../main";
 
 // ─── テスト用フィクスチャ ─────────────────────────────────────────────────────
@@ -25,6 +25,44 @@ const mockStarredItem: StarredItem = {
   starred_at: "2024-11-15T00:00:00Z",
   repo: mockRepo,
 };
+
+// ─── resolveUiLang ───────────────────────────────────────────────────────────
+
+describe("resolveUiLang", () => {
+  it("auto + ja-JP → ja", () => {
+    expect(resolveUiLang("auto", "ja-JP")).toBe("ja");
+  });
+
+  it("auto + ja → ja", () => {
+    expect(resolveUiLang("auto", "ja")).toBe("ja");
+  });
+
+  it("auto + en → en", () => {
+    expect(resolveUiLang("auto", "en")).toBe("en");
+  });
+
+  it("auto + en-US → en", () => {
+    expect(resolveUiLang("auto", "en-US")).toBe("en");
+  });
+
+  it("auto + zh-TW → en（未対応言語はenにフォールバック）", () => {
+    expect(resolveUiLang("auto", "zh-TW")).toBe("en");
+  });
+
+  it("auto + 空文字 → en", () => {
+    expect(resolveUiLang("auto", "")).toBe("en");
+  });
+
+  it("手動設定 en はlocaleに関わらず en を返す", () => {
+    expect(resolveUiLang("en", "ja")).toBe("en");
+    expect(resolveUiLang("en", "ja-JP")).toBe("en");
+  });
+
+  it("手動設定 ja はlocaleに関わらず ja を返す", () => {
+    expect(resolveUiLang("ja", "en")).toBe("ja");
+    expect(resolveUiLang("ja", "en-US")).toBe("ja");
+  });
+});
 
 // ─── checkCanSummarize ────────────────────────────────────────────────────────
 

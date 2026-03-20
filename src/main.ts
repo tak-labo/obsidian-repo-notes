@@ -107,11 +107,8 @@ export default class RepoNotesPlugin extends Plugin {
   settings: RepoNotesSettings;
 
   get t(): T {
-    if (this.settings.uiLang === "auto") {
-      const obsidianLang = (window as any).moment?.locale?.() ?? "en";
-      return getT(obsidianLang.startsWith("ja") ? "ja" : "en");
-    }
-    return getT(this.settings.uiLang);
+    const momentLocale = (window as any).moment?.locale?.() ?? "en";
+    return getT(resolveUiLang(this.settings.uiLang, momentLocale));
   }
 
   async onload() {
@@ -479,6 +476,13 @@ export default class RepoNotesPlugin extends Plugin {
 }
 
 // ─── Pure utility functions (exported for testing) ────────────────────────────
+
+export function resolveUiLang(uiLang: "auto" | Lang, momentLocale: string): Lang {
+  if (uiLang === "auto") {
+    return momentLocale.startsWith("ja") ? "ja" : "en";
+  }
+  return uiLang;
+}
 
 export function checkCanSummarize(settings: Pick<RepoNotesSettings, "summaryProvider" | "summaryBaseUrl" | "summaryModel" | "anthropicApiKey">): boolean {
   return settings.summaryProvider === "openai-compatible"
