@@ -48,10 +48,12 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 - **コミット数取得**はバッチ処理（10件並列）で行われる（GitHub API レート制限対策）。
 
-- **TypeScript制約**: `tsconfig.json` の `lib` が `["ES6", "DOM"]` で固定されている。`Array.prototype.includes` などES2016以降のメソッドはコンパイルエラーになるため、`indexOf` などで代替すること。
+- **TypeScript制約**: `tsconfig.json` の `lib` が `["ES6", "DOM"]`、`target` が `ES6` で固定されている。TypeScript 5系（`^5.3.0`）を使用しており `moduleResolution: bundler` が有効だが、`Array.prototype.includes` などES2016以降のメソッドは型エラーになるため `indexOf` 等で代替すること。
 
 - **`obsidian` モジュールは external**（esbuildがバンドルしない）。Obsidianランタイムが提供するため、importは型定義のみの目的で使う。
 
 ## Release
 
 `.github/workflows/release.yml` により、タグプッシュ時に GitHub Actions で自動リリース。リリース成果物: `main.js`, `manifest.json`, `styles.css`。
+
+タグ形式は **`v` プレフィックスなし**（例: `1.0.0`）。`v1.0.0` ではワークフローが発火しない。
