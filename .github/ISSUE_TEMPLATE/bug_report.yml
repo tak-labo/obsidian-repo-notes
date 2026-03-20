@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill in as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: What happened? What did you expect to happen?
+      placeholder: "Example: When I sync starred repositories, the note is not created in the correct folder."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step instructions to reproduce the bug.
+      placeholder: |
+        1. Open Settings → Repo Notes
+        2. Set folder to "..."
+        3. Click Sync
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please fill in your environment details.
+      value: |
+        - Obsidian version:
+        - Plugin version:
+        - OS:
+        - AI provider (if relevant): Anthropic / Ollama / LM Studio / other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages / logs
+      description: Paste any error messages from the developer console (Ctrl+Shift+I / Cmd+Option+I).
+      render: text
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, config details, or anything else that might help.
