@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeFilename, buildNote, defaultProfile } from "../main";
+import { sanitizeFilename, buildNote, defaultProfile, checkCanSummarize } from "../main";
 import type { StarredItem, GitHubRepo } from "../main";
 
 // ─── テスト用フィクスチャ ─────────────────────────────────────────────────────
@@ -25,6 +25,73 @@ const mockStarredItem: StarredItem = {
   starred_at: "2024-11-15T00:00:00Z",
   repo: mockRepo,
 };
+
+// ─── checkCanSummarize ────────────────────────────────────────────────────────
+
+describe("checkCanSummarize", () => {
+  it("Anthropicプロバイダー: APIキーあり → true", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "anthropic",
+      anthropicApiKey: "sk-ant-api03-xxx",
+      summaryBaseUrl: "",
+      summaryModel: "",
+    })).toBe(true);
+  });
+
+  it("Anthropicプロバイダー: APIキーなし → false", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "anthropic",
+      anthropicApiKey: "",
+      summaryBaseUrl: "",
+      summaryModel: "",
+    })).toBe(false);
+  });
+
+  it("OpenAI互換プロバイダー: BaseURLとモデルあり → true", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "openai-compatible",
+      anthropicApiKey: "",
+      summaryBaseUrl: "http://localhost:11434/v1",
+      summaryModel: "llama3.2",
+    })).toBe(true);
+  });
+
+  it("OpenAI互換プロバイダー: BaseURLなし → false", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "openai-compatible",
+      anthropicApiKey: "sk-ant-api03-xxx",
+      summaryBaseUrl: "",
+      summaryModel: "llama3.2",
+    })).toBe(false);
+  });
+
+  it("OpenAI互換プロバイダー: モデルなし → false", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "openai-compatible",
+      anthropicApiKey: "sk-ant-api03-xxx",
+      summaryBaseUrl: "http://localhost:11434/v1",
+      summaryModel: "",
+    })).toBe(false);
+  });
+
+  it("OpenAI互換プロバイダー: BaseURLとモデル両方なし → false", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "openai-compatible",
+      anthropicApiKey: "",
+      summaryBaseUrl: "",
+      summaryModel: "",
+    })).toBe(false);
+  });
+
+  it("OpenAI互換プロバイダー: APIキーなしでもBaseURL+モデルがあれば true（Ollama想定）", () => {
+    expect(checkCanSummarize({
+      summaryProvider: "openai-compatible",
+      anthropicApiKey: "",
+      summaryBaseUrl: "http://localhost:11434/v1",
+      summaryModel: "mistral",
+    })).toBe(true);
+  });
+});
 
 // ─── sanitizeFilename ─────────────────────────────────────────────────────────
 

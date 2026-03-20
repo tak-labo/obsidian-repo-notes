@@ -274,9 +274,7 @@ export default class RepoNotesPlugin extends Plugin {
           if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
             readmeRaw = await this.fetchReadme(profile.githubToken, repo.full_name);
           }
-          const canSummarize = this.settings.summaryProvider === "openai-compatible"
-            ? !!(this.settings.summaryBaseUrl && this.settings.summaryModel)
-            : !!this.settings.anthropicApiKey;
+          const canSummarize = checkCanSummarize(this.settings);
           if (profile.includeReadmeExcerpt && canSummarize && readmeRaw) {
             readmeSummary = await this.summarizeReadme(readmeRaw, repo.full_name);
           }
@@ -471,6 +469,12 @@ export default class RepoNotesPlugin extends Plugin {
 }
 
 // ─── Pure utility functions (exported for testing) ────────────────────────────
+
+export function checkCanSummarize(settings: Pick<RepoNotesSettings, "summaryProvider" | "summaryBaseUrl" | "summaryModel" | "anthropicApiKey">): boolean {
+  return settings.summaryProvider === "openai-compatible"
+    ? !!(settings.summaryBaseUrl && settings.summaryModel)
+    : !!settings.anthropicApiKey;
+}
 
 export function buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
   const repo = (item.repo ?? item) as GitHubRepo;
@@ -779,9 +783,9 @@ class RepoNotesSettingTab extends PluginSettingTab {
          })
       );
     if (this.plugin.settings.summaryProvider === "anthropic") {
-      new Setting(containerEl).setName(t.anthropicKey).setDesc(t.anthropicKeyDesc)
-        .addText((tx) => tx.setPlaceholder(t.anthropicKeyPlaceholder).setValue(this.plugin.settings.anthropicApiKey)
-          .onChange(async (v) => { this.plugin.settings.anthropicApiKey = v.trim(); await this.plugin.saveSettings(); }));
+      this.addApiKeySetting(containerEl, t.anthropicKey, t.anthropicKeyDesc, t.anthropicKeyPlaceholder,
+        () => this.plugin.settings.anthropicApiKey,
+        async (v) => { this.plugin.settings.anthropicApiKey = v; await this.plugin.saveSettings(); });
     }
     if (this.plugin.settings.summaryProvider === "openai-compatible") {
       new Setting(containerEl).setName(t.summaryBaseUrl).setDesc(t.summaryBaseUrlDesc)
@@ -790,9 +794,9 @@ class RepoNotesSettingTab extends PluginSettingTab {
       new Setting(containerEl).setName(t.summaryModel).setDesc(t.summaryModelDesc)
         .addText((tx) => tx.setPlaceholder(t.summaryModelPlaceholder).setValue(this.plugin.settings.summaryModel)
           .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); }));
-      new Setting(containerEl).setName(t.summaryApiKey).setDesc(t.summaryApiKeyDesc)
-        .addText((tx) => tx.setPlaceholder(t.summaryApiKeyPlaceholder).setValue(this.plugin.settings.summaryApiKey)
-          .onChange(async (v) => { this.plugin.settings.summaryApiKey = v.trim(); await this.plugin.saveSettings(); }));
+      this.addApiKeySetting(containerEl, t.summaryApiKey, t.summaryApiKeyDesc, t.summaryApiKeyPlaceholder,
+        () => this.plugin.settings.summaryApiKey,
+        async (v) => { this.plugin.settings.summaryApiKey = v; await this.plugin.saveSettings(); });
     }
     new Setting(containerEl).setName(t.summaryLang)
       .addDropdown((d) => d.addOption("en", "English").addOption("ja", "日本語")
@@ -815,6 +819,39 @@ class RepoNotesSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: t.sectionActions });
     new Setting(containerEl).setName(t.syncNow).setDesc(t.syncNowDesc(profile.name))
       .addButton((btn) => btn.setButtonText(t.modalSyncBtn).setCta().onClick(() => new SyncModal(this.app, this.plugin, profile.id).open()));
+  }
+
+  private addApiKeySetting(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    placeholder: string,
+    getValue: () => string,
+    setValue: (v: string) => Promise<void>
+  ) {
+    const t = this.plugin.t;
+    let inputEl: HTMLInputElement;
+    new Setting(containerEl).setName(name).setDesc(desc)
+      .addText((tx) => {
+        inputEl = tx.inputEl;
+        inputEl.type = "password";
+        tx.setPlaceholder(placeholder).setValue(getValue())
+          .onChange(async (v) => { await setValue(v.trim()); });
+      })
+      .addExtraButton((btn) => {
+        btn.setIcon("eye").setTooltip(t.showApiKey)
+          .onClick(() => {
+            if (inputEl.type === "password") {
+              inputEl.type = "text";
+              btn.setIcon("eye-off");
+              btn.setTooltip(t.hideApiKey);
+            } else {
+              inputEl.type = "password";
+              btn.setIcon("eye");
+              btn.setTooltip(t.showApiKey);
+            }
+          });
+      });
   }
 
   private addFolderSetting(
