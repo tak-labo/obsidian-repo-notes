@@ -403,7 +403,7 @@ export default class RepoNotesPlugin extends Plugin {
 
   // ─── Note Builder ────────────────────────────────────────────────────────────
 
-  buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" = "stars"): string {
+  buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
     const repo = (item.repo ?? item) as GitHubRepo;
     const starredAt = item.starred_at ?? null;
     const now = new Date().toISOString().split("T")[0];

@@ -207,5 +207,5 @@ const translations = {
 export type T = typeof translations.en;
 
 export function getT(lang: Lang): T {
-  return translations[lang] ?? translations.en;
+  return (translations[lang] ?? translations.en) as T;
 }
