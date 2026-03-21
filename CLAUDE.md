@@ -69,6 +69,11 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 | `sanitizeFilename(name)` | ファイル名に使えない文字をハイフンに変換する |
 | `defaultProfile(id, name)` | デフォルト値で Profile オブジェクトを生成する |
 
+## Git ワークフロー
+
+- **mainブランチへの直接pushは禁止**（ブランチ保護ルールあり）。必ずブランチを作成してPRを出すこと。
+- コミット後は `git push origin <branch>` → `gh pr create` の流れで進める。
+
 ## Release
 
 タグをプッシュすると `.github/workflows/release.yml` が起動し、自動でリリースと CHANGELOG.md 更新PRを作成する。
