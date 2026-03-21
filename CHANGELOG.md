@@ -10,22 +10,6 @@
 
 **Full Changelog**: https://github.com/tak-labo/obsidian-repo-notes/compare/1.0.1...1.0.2
 
-## What's Changed
-* chore: CHANGELOG.md追加とリリース自動更新ワークフロー設定 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/8
-* AI要約機能の改善と同期中止ボタンを追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/10
-* バージョンを1.0.2に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/11
-
-
-**Full Changelog**: https://github.com/tak-labo/obsidian-repo-notes/compare/1.0.1...1.0.2
-
-## What's Changed
-* chore: CHANGELOG.md追加とリリース自動更新ワークフロー設定 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/8
-* AI要約機能の改善と同期中止ボタンを追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/10
-* バージョンを1.0.2に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/11
-
-
-**Full Changelog**: https://github.com/tak-labo/obsidian-repo-notes/compare/1.0.1...1.0.2
-
 ---
 
 
