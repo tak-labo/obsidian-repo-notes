@@ -63,6 +63,13 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           DATE=$(date +%Y-%m-%d)
+
+          # 既にこのバージョンが存在する場合はスキップ
+          if grep -q "^## $VERSION" CHANGELOG.md 2>/dev/null; then
+            echo "バージョン $VERSION は既に CHANGELOG.md に存在します。スキップします。"
+            exit 0
+          fi
+
           NOTES=$(gh release view "$VERSION" --json body -q .body)
 
           {
