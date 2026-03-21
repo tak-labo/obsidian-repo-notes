@@ -111,24 +111,24 @@ export default class RepoNotesPlugin extends Plugin {
   settings: RepoNotesSettings;
 
   get t(): T {
-    const momentLocale = (window as any).moment?.locale?.() ?? "en";
+    const momentLocale = (window as Window & { moment?: { locale?: () => string } }).moment?.locale?.() ?? "en";
     return getT(resolveUiLang(this.settings.uiLang, momentLocale));
   }
 
   async onload() {
     await this.loadSettings();
 
-    this.addRibbonIcon("star", "Repo Notes", () => new SyncModal(this.app, this).open());
+    this.addRibbonIcon("star", "Sync repos", () => new SyncModal(this.app, this).open());
 
     this.addCommand({
-      id: "repo-notes-sync",
-      name: "Repo Notes: Sync",
+      id: "sync",
+      name: "Sync",
       callback: () => new SyncModal(this.app, this).open(),
     });
 
     this.addCommand({
       id: "open-settings",
-      name: "Repo Notes: Open settings",
+      name: "Open settings",
       callback: () => {
         // @ts-ignore
         this.app.setting.open();
@@ -143,9 +143,11 @@ export default class RepoNotesPlugin extends Plugin {
       const pid = this.settings.autoSyncProfileId;
       const profile = this.settings.profiles.find((p) => p.id === pid) ?? this.settings.profiles[0];
       if (profile?.githubToken) {
-        this.app.workspace.onLayoutReady(async () => {
-          new Notice(this.t.noticeAutoSync(profile.name));
-          await this.syncProfile(profile, (msg) => console.log(msg));
+        this.app.workspace.onLayoutReady(() => {
+          void (async () => {
+            new Notice(this.t.noticeAutoSync(profile.name));
+            await this.syncProfile(profile, (msg) => console.debug(msg));
+          })();
         });
       }
     }
@@ -155,9 +157,9 @@ export default class RepoNotesPlugin extends Plugin {
     const saved = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     // Migrate old single-account format
-    if (saved && (saved as any).githubToken && !saved.profiles) {
+    if (saved && saved.githubToken && !saved.profiles) {
       const p = defaultProfile("default", "Personal");
-      const s = saved as any;
+      const s = saved;
       Object.assign(p, {
         githubToken: s.githubToken ?? "",
         syncStars: s.syncStars ?? true,
@@ -193,7 +195,7 @@ export default class RepoNotesPlugin extends Plugin {
       this.settings.anthropicModel = "claude-haiku-4-5-20251001";
     }
     // Migrate: if uiLang was not explicitly saved (old default "en"), reset to "auto"
-    if (!saved || !(saved as any).uiLang) {
+    if (!saved || !saved.uiLang) {
       this.settings.uiLang = "auto";
     }
   }
@@ -301,7 +303,10 @@ export default class RepoNotesPlugin extends Plugin {
 
           const content = this.buildNote(profile, item, commitCounts.get(repo.full_name) ?? -1, readmeSummary, readmeRaw, mode);
           if (exists) {
-            await this.app.vault.modify(this.app.vault.getAbstractFileByPath(fpath) as TFile, content);
+            const existingFile = this.app.vault.getAbstractFileByPath(fpath);
+            if (existingFile instanceof TFile) {
+              await this.app.vault.modify(existingFile, content);
+            }
           } else {
             await this.app.vault.create(fpath, content);
           }
@@ -626,49 +631,51 @@ class SyncModal extends Modal {
     this.progressBar = progressWrap.createDiv("gs-track").createDiv("gs-fill");
 
     this.statsEl = contentEl.createDiv("gs-stats");
-    this.statsEl.style.display = "none";
+    this.statsEl.addClass("repo-notes-hidden");
     this.logEl = contentEl.createDiv("gs-log");
 
     const btnRow = contentEl.createDiv("gs-btn-row");
     const syncBtn = btnRow.createEl("button", { text: t.modalSyncBtn, cls: "mod-cta" });
     const abortBtn = btnRow.createEl("button", { text: t.modalAbort });
-    abortBtn.style.display = "none";
+    abortBtn.addClass("repo-notes-hidden");
 
-    syncBtn.addEventListener("click", async () => {
-      if (this.running) return;
-      const profile = this.plugin.settings.profiles.find((p) => p.id === selectedProfileId);
-      if (!profile) return;
+    syncBtn.addEventListener("click", () => {
+      void (async () => {
+        if (this.running) return;
+        const profile = this.plugin.settings.profiles.find((p) => p.id === selectedProfileId);
+        if (!profile) return;
 
-      this.running = true;
-      this.aborted = false;
-      syncBtn.style.display = "none";
-      abortBtn.style.display = "";
-      abortBtn.disabled = false;
-      abortBtn.setText(t.modalAbort);
-      this.logEl.empty();
-      this.statsEl.style.display = "none";
+        this.running = true;
+        this.aborted = false;
+        syncBtn.addClass("repo-notes-hidden");
+        abortBtn.removeClass("repo-notes-hidden");
+        abortBtn.disabled = false;
+        abortBtn.setText(t.modalAbort);
+        this.logEl.empty();
+        this.statsEl.addClass("repo-notes-hidden");
 
-      let count = 0;
-      await this.plugin.syncProfile(
-        profile,
-        (msg) => {
-          this.progressEl.setText(msg);
-          this.appendLog(msg);
-          count++;
-          this.progressBar.style.width = `${Math.min(count * 2, 95)}%`;
-        },
-        (saved, skipped, errors, total) => {
-          this.progressBar.style.width = "100%";
-          this.showStats(saved, skipped, errors, total);
-        },
-        () => this.aborted
-      );
+        let count = 0;
+        await this.plugin.syncProfile(
+          profile,
+          (msg) => {
+            this.progressEl.setText(msg);
+            this.appendLog(msg);
+            count++;
+            this.progressBar.setCssProps({ "--gs-fill-width": `${Math.min(count * 2, 95)}%` });
+          },
+          (saved, skipped, errors, total) => {
+            this.progressBar.setCssProps({ "--gs-fill-width": "100%" });
+            this.showStats(saved, skipped, errors, total);
+          },
+          () => this.aborted
+        );
 
-      this.running = false;
-      abortBtn.style.display = "none";
-      syncBtn.style.display = "";
-      syncBtn.setText(t.modalResync);
-      if (this.aborted) this.progressEl.setText(t.modalAborted);
+        this.running = false;
+        abortBtn.addClass("repo-notes-hidden");
+        syncBtn.removeClass("repo-notes-hidden");
+        syncBtn.setText(t.modalResync);
+        if (this.aborted) this.progressEl.setText(t.modalAborted);
+      })();
     });
 
     abortBtn.addEventListener("click", () => {
@@ -695,7 +702,7 @@ class SyncModal extends Modal {
 
   showStats(saved: number, skipped: number, errors: number, total: number) {
     const t = this.plugin.t;
-    this.statsEl.style.display = "flex";
+    this.statsEl.removeClass("repo-notes-hidden");
     this.statsEl.empty();
     for (const s of [
       { label: t.statTotal, value: total }, { label: t.statSaved, value: saved },
@@ -726,7 +733,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const t = this.plugin.t;
     containerEl.empty();
-    containerEl.createEl("h2", { text: t.settingsTitle });
+    new Setting(containerEl).setName(t.settingsTitle).setHeading();
 
     const profiles = this.plugin.settings.profiles;
     if (!profiles.find((p) => p.id === this.activeProfileId)) {
@@ -746,7 +753,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
       );
 
     // ── プロファイルタブ ──────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionProfiles });
+    new Setting(containerEl).setName(t.sectionProfiles).setHeading();
     const tabRow = containerEl.createDiv({ attr: { style: "display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;" } });
 
     const renderTabs = () => {
@@ -763,12 +770,14 @@ class RepoNotesSettingTab extends PluginSettingTab {
         text: t.addProfile,
         attr: { style: "padding:4px 14px; border-radius:6px; border:1px dashed var(--color-border-secondary); cursor:pointer; font-size:13px;" },
       });
-      addBtn.addEventListener("click", async () => {
-        const p = defaultProfile(genId(), `Account ${this.plugin.settings.profiles.length + 1}`);
-        this.plugin.settings.profiles.push(p);
-        this.activeProfileId = p.id;
-        await this.plugin.saveSettings();
-        this.display();
+      addBtn.addEventListener("click", () => {
+        void (async () => {
+          const p = defaultProfile(genId(), `Account ${this.plugin.settings.profiles.length + 1}`);
+          this.plugin.settings.profiles.push(p);
+          this.activeProfileId = p.id;
+          await this.plugin.saveSettings();
+          this.display();
+        })();
       });
     };
     renderTabs();
@@ -789,20 +798,20 @@ class RepoNotesSettingTab extends PluginSettingTab {
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionAuth });
+    new Setting(containerEl).setName(t.sectionAuth).setHeading();
     new Setting(containerEl).setName(t.tokenName).setDesc(t.tokenDesc)
       .addText((tx) => tx.setPlaceholder(t.tokenPlaceholder).setValue(profile.githubToken)
         .onChange(async (v) => { profile.githubToken = v.trim(); await this.plugin.saveSettings(); }));
 
     // ── Stars ─────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionStars });
+    new Setting(containerEl).setName(t.sectionStars).setHeading();
     new Setting(containerEl).setName(t.syncStars)
       .addToggle((tg) => tg.setValue(profile.syncStars).onChange(async (v) => { profile.syncStars = v; await this.plugin.saveSettings(); }));
     this.addFolderSetting(containerEl, t.starsFolder, "", profile.starsFolder, profile.starsFolderParent,
       async (tv, dv) => { if (tv !== null) profile.starsFolder = tv; if (dv !== null) profile.starsFolderParent = dv; await this.plugin.saveSettings(); });
 
     // ── My Repos ──────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionMyRepos });
+    new Setting(containerEl).setName(t.sectionMyRepos).setHeading();
     new Setting(containerEl).setName(t.syncMyRepos)
       .addToggle((tg) => tg.setValue(profile.syncMyRepos).onChange(async (v) => { profile.syncMyRepos = v; await this.plugin.saveSettings(); }));
     this.addFolderSetting(containerEl, t.myReposFolder, "", profile.myReposFolder, profile.myReposFolderParent,
@@ -813,7 +822,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
       .addToggle((tg) => tg.setValue(profile.myReposIncludePrivate).onChange(async (v) => { profile.myReposIncludePrivate = v; await this.plugin.saveSettings(); }));
 
     // ── Organizations ─────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionOrgs });
+    new Setting(containerEl).setName(t.sectionOrgs).setHeading();
     new Setting(containerEl).setName(t.orgNames).setDesc(t.orgNamesDesc)
       .addTextArea((ta) => {
         ta.setPlaceholder(t.orgNamesPlaceholder)
@@ -822,12 +831,12 @@ class RepoNotesSettingTab extends PluginSettingTab {
             profile.orgNames = v.split("\n").map((s) => s.trim()).filter(Boolean);
             await this.plugin.saveSettings();
           });
-        ta.inputEl.style.width = "100%";
+        ta.inputEl.addClass("repo-notes-full-width");
         ta.inputEl.rows = 3;
       });
 
     // ── Note content ──────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionNoteContent });
+    new Setting(containerEl).setName(t.sectionNoteContent).setHeading();
     const toggles: Array<[keyof Profile, string, string]> = [
       ["includeDescription", t.includeDescription, t.includeDescriptionDesc],
       ["includeTopics", t.includeTopics, t.includeTopicsDesc],
@@ -845,14 +854,14 @@ class RepoNotesSettingTab extends PluginSettingTab {
     }
 
     // ── README ────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionReadme });
+    new Setting(containerEl).setName(t.sectionReadme).setHeading();
     new Setting(containerEl).setName(t.includeReadmeRaw).setDesc(t.includeReadmeRawDesc)
       .addToggle((tg) => tg.setValue(profile.includeReadmeRaw).onChange(async (v) => { profile.includeReadmeRaw = v; await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName(t.includeReadmeSummary).setDesc(t.includeReadmeSummaryDesc)
       .addToggle((tg) => tg.setValue(profile.includeReadmeExcerpt).onChange(async (v) => { profile.includeReadmeExcerpt = v; await this.plugin.saveSettings(); }));
 
     // ── Shared ────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionShared });
+    new Setting(containerEl).setName(t.sectionShared).setHeading();
     new Setting(containerEl).setName(t.summaryProvider).setDesc(t.summaryProviderDesc)
       .addDropdown((d) =>
         d.addOption("anthropic", "Anthropic (Claude)")
@@ -882,18 +891,19 @@ class RepoNotesSettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.anthropicModel)
             .onChange(async (v) => { this.plugin.settings.anthropicModel = v.trim(); await this.plugin.saveSettings(); });
         }
-        const btn = anthropicModelSetting.controlEl.createEl("button", { text: t.summaryModelFetch });
-        btn.style.marginLeft = "8px";
-        btn.addEventListener("click", async () => {
-          btn.disabled = true;
-          btn.setText(t.summaryModelFetching);
-          try {
-            const fetched = await this.plugin.fetchAnthropicModels();
-            renderAnthropicModelControl(fetched);
-          } catch (e) {
-            console.error("[repo-notes] fetchAnthropicModels failed:", e);
-            renderAnthropicModelControl(null);
-          }
+        const btn = anthropicModelSetting.controlEl.createEl("button", { text: t.summaryModelFetch, cls: "repo-notes-model-btn" });
+        btn.addEventListener("click", () => {
+          void (async () => {
+            btn.disabled = true;
+            btn.setText(t.summaryModelFetching);
+            try {
+              const fetched = await this.plugin.fetchAnthropicModels();
+              renderAnthropicModelControl(fetched);
+            } catch (e) {
+              console.error("[repo-notes] fetchAnthropicModels failed:", e);
+              renderAnthropicModelControl(null);
+            }
+          })();
         });
       };
       renderAnthropicModelControl(null);
@@ -901,7 +911,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
     if (this.plugin.settings.summaryProvider === "openai-compatible") {
       new Setting(containerEl).setName(t.summaryPreset).setDesc(t.summaryPresetDesc)
         .addDropdown((d) => {
-          d.addOption("", "-- custom --")
+          d.addOption("", "Custom")
            .addOption("ollama", "Ollama (localhost:11434)")
            .addOption("lmstudio", "LM Studio (localhost:1234)")
            .setValue("")
@@ -929,18 +939,19 @@ class RepoNotesSettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.summaryModel)
             .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); });
         }
-        const btn = modelSetting.controlEl.createEl("button", { text: t.summaryModelFetch });
-        btn.style.marginLeft = "8px";
-        btn.addEventListener("click", async () => {
-          btn.disabled = true;
-          btn.setText(t.summaryModelFetching);
-          try {
-            const fetched = await this.plugin.fetchAvailableModels(this.plugin.settings.summaryBaseUrl);
-            renderModelControl(fetched);
-          } catch (e) {
-            console.error("[repo-notes] fetchAvailableModels failed:", e);
-            renderModelControl(null);
-          }
+        const btn = modelSetting.controlEl.createEl("button", { text: t.summaryModelFetch, cls: "repo-notes-model-btn" });
+        btn.addEventListener("click", () => {
+          void (async () => {
+            btn.disabled = true;
+            btn.setText(t.summaryModelFetching);
+            try {
+              const fetched = await this.plugin.fetchAvailableModels(this.plugin.settings.summaryBaseUrl);
+              renderModelControl(fetched);
+            } catch (e) {
+              console.error("[repo-notes] fetchAvailableModels failed:", e);
+              renderModelControl(null);
+            }
+          })();
         });
       };
       renderModelControl(null);
@@ -966,7 +977,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
     }
 
     // ── Actions ───────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.sectionActions });
+    new Setting(containerEl).setName(t.sectionActions).setHeading();
     new Setting(containerEl).setName(t.syncNow).setDesc(t.syncNowDesc(profile.name))
       .addButton((btn) => btn.setButtonText(t.modalSyncBtn).setCta().onClick(() => new SyncModal(this.app, this.plugin, profile.id).open()));
   }
@@ -1045,7 +1056,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
           updatePreview(folders.includes(dropValue) ? dropValue : "", value);
           await onChange(value, null);
         });
-      tx.inputEl.style.width = "140px";
+      tx.inputEl.addClass("repo-notes-folder-input");
     });
 
     previewEl = setting.controlEl.createEl("span", { attr: { style: "margin-left:8px; font-size:12px; color:var(--text-muted);" } });
