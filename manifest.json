@@ -3,7 +3,7 @@
   "name": "Repo Notes",
   "version": "1.0.2",
   "minAppVersion": "0.15.0",
-  "description": "Import GitHub starred repos and your own repositories as structured Obsidian notes.",
+  "description": "Import GitHub starred repos and your own repositories as structured notes.",
   "author": "Takahiro",
   "authorUrl": "https://github.com/tak-labo",
   "fundingUrl": "",
