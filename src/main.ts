@@ -143,9 +143,11 @@ export default class RepoNotesPlugin extends Plugin {
       const pid = this.settings.autoSyncProfileId;
       const profile = this.settings.profiles.find((p) => p.id === pid) ?? this.settings.profiles[0];
       if (profile?.githubToken) {
-        this.app.workspace.onLayoutReady(async () => {
-          new Notice(this.t.noticeAutoSync(profile.name));
-          await this.syncProfile(profile, (msg) => console.debug(msg));
+        this.app.workspace.onLayoutReady(() => {
+          void (async () => {
+            new Notice(this.t.noticeAutoSync(profile.name));
+            await this.syncProfile(profile, (msg) => console.debug(msg));
+          })();
         });
       }
     }
