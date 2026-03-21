@@ -667,7 +667,7 @@ class SyncModal extends Modal {
       this.running = false;
       abortBtn.style.display = "none";
       syncBtn.style.display = "";
-      syncBtn.setText(this.aborted ? t.modalResync : t.modalResync);
+      syncBtn.setText(t.modalResync);
       if (this.aborted) this.progressEl.setText(t.modalAborted);
     });
 
