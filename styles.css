@@ -34,7 +34,7 @@
 
 .gs-fill {
   height: 100%;
-  width: 0%;
+  width: var(--gs-fill-width, 0%);
   background: linear-gradient(90deg, var(--interactive-accent), #5BC4FF);
   border-radius: 2px;
   transition: width 0.3s ease;
@@ -103,4 +103,20 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.repo-notes-hidden {
+  display: none !important;
+}
+
+.repo-notes-full-width {
+  width: 100%;
+}
+
+.repo-notes-folder-input {
+  width: 140px;
+}
+
+.repo-notes-model-btn {
+  margin-left: 8px;
 }
