@@ -1,11 +1,13 @@
 import {
   App,
+  DropdownComponent,
   Modal,
   Notice,
   Plugin,
   PluginSettingTab,
   Setting,
   TFile,
+  TextComponent,
   requestUrl,
 } from "obsidian";
 import { type Lang, type T, getT } from "./i18n";
@@ -66,6 +68,7 @@ interface RepoNotesSettings {
   autoSyncOnStartup: boolean;
   autoSyncProfileId: string;
   summaryProvider: "anthropic" | "openai-compatible";
+  anthropicModel: string;
   summaryBaseUrl: string;
   summaryModel: string;
   summaryApiKey: string;
@@ -92,6 +95,7 @@ const DEFAULT_SETTINGS: RepoNotesSettings = {
   uiLang: "auto",
   autoSyncOnStartup: false, autoSyncProfileId: "",
   summaryProvider: "anthropic",
+  anthropicModel: "claude-haiku-4-5-20251001",
   summaryBaseUrl: "",
   summaryModel: "",
   summaryApiKey: "",
@@ -185,6 +189,9 @@ export default class RepoNotesPlugin extends Plugin {
     if (!this.settings.summaryProvider) {
       this.settings.summaryProvider = "anthropic";
     }
+    if (!this.settings.anthropicModel) {
+      this.settings.anthropicModel = "claude-haiku-4-5-20251001";
+    }
     // Migrate: if uiLang was not explicitly saved (old default "en"), reset to "auto"
     if (!saved || !(saved as any).uiLang) {
       this.settings.uiLang = "auto";
@@ -198,25 +205,29 @@ export default class RepoNotesPlugin extends Plugin {
   async syncProfile(
     profile: Profile,
     onProgress: (msg: string) => void,
-    onResult?: (saved: number, skipped: number, errors: number, total: number) => void
+    onResult?: (saved: number, skipped: number, errors: number, total: number) => void,
+    shouldAbort?: () => boolean
   ) {
     let totalSaved = 0, totalSkipped = 0, totalErrors = 0, totalCount = 0;
     const acc = (s: number, sk: number, e: number, t: number) => {
       totalSaved += s; totalSkipped += sk; totalErrors += e; totalCount += t;
     };
     if (profile.syncStars) {
+      if (shouldAbort?.()) { onResult?.(totalSaved, totalSkipped, totalErrors, totalCount); return; }
       const parts = [profile.starsFolderParent, profile.starsFolder].filter(Boolean);
-      await this.syncRepoList(profile, "stars", parts.join("/") || "GitHub Stars", onProgress, acc);
+      await this.syncRepoList(profile, "stars", parts.join("/") || "GitHub Stars", onProgress, acc, undefined, shouldAbort);
     }
     if (profile.syncMyRepos) {
+      if (shouldAbort?.()) { onResult?.(totalSaved, totalSkipped, totalErrors, totalCount); return; }
       const parts = [profile.myReposFolderParent, profile.myReposFolder].filter(Boolean);
-      await this.syncRepoList(profile, "mine", parts.join("/") || "My Repos", onProgress, acc);
+      await this.syncRepoList(profile, "mine", parts.join("/") || "My Repos", onProgress, acc, undefined, shouldAbort);
     }
     for (const org of (profile.orgNames ?? [])) {
+      if (shouldAbort?.()) break;
       const orgLogin = org.trim();
       if (!orgLogin) continue;
       const parts = [profile.myReposFolderParent, orgLogin].filter(Boolean);
-      await this.syncRepoList(profile, "org", parts.join("/") || orgLogin, onProgress, acc, orgLogin);
+      await this.syncRepoList(profile, "org", parts.join("/") || orgLogin, onProgress, acc, orgLogin, shouldAbort);
     }
     onResult?.(totalSaved, totalSkipped, totalErrors, totalCount);
   }
@@ -227,7 +238,8 @@ export default class RepoNotesPlugin extends Plugin {
     folder: string,
     onProgress: (msg: string) => void,
     onResult?: (saved: number, skipped: number, errors: number, total: number) => void,
-    orgLogin?: string
+    orgLogin?: string,
+    shouldAbort?: () => boolean
   ) {
     const t = this.t;
     if (!profile.githubToken) {
@@ -265,6 +277,7 @@ export default class RepoNotesPlugin extends Plugin {
       }
 
       for (let i = 0; i < items.length; i++) {
+        if (shouldAbort?.()) break;
         const item = items[i];
         const repo = (item.repo ?? item) as unknown as GitHubRepo;
         const fname = this.sanitizeFilename(repo.full_name.replace("/", "_")) + ".md";
@@ -417,14 +430,20 @@ export default class RepoNotesPlugin extends Plugin {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: this.settings.anthropicModel || "claude-haiku-4-5-20251001",
           max_tokens: 400,
           messages: [{ role: "user", content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. No preamble.\n\n---\n${readmeText}` }],
         }),
       });
-      if (res.status !== 200) return null;
+      if (res.status !== 200) {
+        console.error(`[repo-notes] Anthropic API error: status=${res.status}`, res.json);
+        return null;
+      }
       return res.json?.content?.[0]?.text ?? null;
-    } catch { return null; }
+    } catch (e) {
+      console.error("[repo-notes] Anthropic API request failed:", e);
+      return null;
+    }
   }
 
   private async summarizeReadmeOpenAI(readmeText: string, repoName: string): Promise<string | null> {
@@ -442,13 +461,47 @@ export default class RepoNotesPlugin extends Plugin {
         headers,
         body: JSON.stringify({
           model: this.settings.summaryModel,
-          max_tokens: 400,
-          messages: [{ role: "user", content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. No preamble.\n\n---\n${readmeText}` }],
+          max_tokens: 4000,
+          messages: [
+            { role: "system", content: "You are a concise summarizer. Output only the final summary. No thinking, no preamble, no explanation." },
+            { role: "user", content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. Reply only in ${lang}.\n\n---\n${readmeText}` },
+          ],
         }),
       });
-      if (res.status !== 200) return null;
-      return res.json?.choices?.[0]?.message?.content ?? null;
-    } catch { return null; }
+      if (res.status !== 200) {
+        console.error(`[repo-notes] OpenAI-compatible API error: status=${res.status}`, res.json);
+        return null;
+      }
+      const msg = res.json?.choices?.[0]?.message;
+      const text = (msg?.content || null);
+      if (!text) console.warn("[repo-notes] OpenAI-compatible: unexpected response shape", JSON.stringify(res.json?.choices?.[0]));
+      return text;
+    } catch (e) {
+      console.error("[repo-notes] OpenAI-compatible API request failed:", e);
+      return null;
+    }
+  }
+
+  async fetchAvailableModels(baseUrl: string): Promise<string[]> {
+    const base = baseUrl.replace(/\/$/, "");
+    const headers: Record<string, string> = {};
+    if (this.settings.summaryApiKey) headers["authorization"] = `Bearer ${this.settings.summaryApiKey}`;
+    const res = await requestUrl({ url: `${base}/models`, method: "GET", headers });
+    if (res.status !== 200) throw new Error(`status ${res.status}`);
+    const data: Array<{ id: string }> = res.json?.data ?? [];
+    return data.map((m) => m.id).sort();
+  }
+
+  async fetchAnthropicModels(): Promise<string[]> {
+    if (!this.settings.anthropicApiKey) throw new Error("No API key");
+    const res = await requestUrl({
+      url: "https://api.anthropic.com/v1/models",
+      method: "GET",
+      headers: { "x-api-key": this.settings.anthropicApiKey, "anthropic-version": "2023-06-01" },
+    });
+    if (res.status !== 200) throw new Error(`status ${res.status}`);
+    const data: Array<{ id: string }> = res.json?.data ?? [];
+    return data.map((m) => m.id).sort();
   }
 
   // ─── Note Builder ────────────────────────────────────────────────────────────
@@ -539,6 +592,7 @@ class SyncModal extends Modal {
   progressBar: HTMLElement;
   statsEl: HTMLElement;
   running = false;
+  aborted = false;
   initialProfileId: string | null;
 
   constructor(app: App, plugin: RepoNotesPlugin, initialProfileId: string | null = null) {
@@ -577,6 +631,8 @@ class SyncModal extends Modal {
 
     const btnRow = contentEl.createDiv("gs-btn-row");
     const syncBtn = btnRow.createEl("button", { text: t.modalSyncBtn, cls: "mod-cta" });
+    const abortBtn = btnRow.createEl("button", { text: t.modalAbort });
+    abortBtn.style.display = "none";
 
     syncBtn.addEventListener("click", async () => {
       if (this.running) return;
@@ -584,8 +640,11 @@ class SyncModal extends Modal {
       if (!profile) return;
 
       this.running = true;
-      syncBtn.disabled = true;
-      syncBtn.setText(t.modalSyncing);
+      this.aborted = false;
+      syncBtn.style.display = "none";
+      abortBtn.style.display = "";
+      abortBtn.disabled = false;
+      abortBtn.setText(t.modalAbort);
       this.logEl.empty();
       this.statsEl.style.display = "none";
 
@@ -601,12 +660,21 @@ class SyncModal extends Modal {
         (saved, skipped, errors, total) => {
           this.progressBar.style.width = "100%";
           this.showStats(saved, skipped, errors, total);
-        }
+        },
+        () => this.aborted
       );
 
       this.running = false;
-      syncBtn.disabled = false;
-      syncBtn.setText(t.modalResync);
+      abortBtn.style.display = "none";
+      syncBtn.style.display = "";
+      syncBtn.setText(this.aborted ? t.modalResync : t.modalResync);
+      if (this.aborted) this.progressEl.setText(t.modalAborted);
+    });
+
+    abortBtn.addEventListener("click", () => {
+      this.aborted = true;
+      abortBtn.disabled = true;
+      abortBtn.setText(t.modalAborted);
     });
 
     const closeBtn = btnRow.createEl("button", { text: t.modalClose });
@@ -800,14 +868,82 @@ class RepoNotesSettingTab extends PluginSettingTab {
       this.addApiKeySetting(containerEl, t.anthropicKey, t.anthropicKeyDesc, t.anthropicKeyPlaceholder,
         () => this.plugin.settings.anthropicApiKey,
         async (v) => { this.plugin.settings.anthropicApiKey = v; await this.plugin.saveSettings(); });
+      const anthropicModelSetting = new Setting(containerEl).setName(t.anthropicModel).setDesc(t.anthropicModelDesc);
+      const renderAnthropicModelControl = (models: string[] | null) => {
+        anthropicModelSetting.controlEl.empty();
+        if (models && models.length > 0) {
+          new DropdownComponent(anthropicModelSetting.controlEl)
+            .addOptions(Object.fromEntries(models.map((m) => [m, m])))
+            .setValue(this.plugin.settings.anthropicModel || models[0])
+            .onChange(async (v) => { this.plugin.settings.anthropicModel = v; await this.plugin.saveSettings(); });
+        } else {
+          new TextComponent(anthropicModelSetting.controlEl)
+            .setPlaceholder("claude-haiku-4-5-20251001")
+            .setValue(this.plugin.settings.anthropicModel)
+            .onChange(async (v) => { this.plugin.settings.anthropicModel = v.trim(); await this.plugin.saveSettings(); });
+        }
+        const btn = anthropicModelSetting.controlEl.createEl("button", { text: t.summaryModelFetch });
+        btn.style.marginLeft = "8px";
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          btn.setText(t.summaryModelFetching);
+          try {
+            const fetched = await this.plugin.fetchAnthropicModels();
+            renderAnthropicModelControl(fetched);
+          } catch (e) {
+            console.error("[repo-notes] fetchAnthropicModels failed:", e);
+            renderAnthropicModelControl(null);
+          }
+        });
+      };
+      renderAnthropicModelControl(null);
     }
     if (this.plugin.settings.summaryProvider === "openai-compatible") {
+      new Setting(containerEl).setName(t.summaryPreset).setDesc(t.summaryPresetDesc)
+        .addDropdown((d) => {
+          d.addOption("", "-- custom --")
+           .addOption("ollama", "Ollama (localhost:11434)")
+           .addOption("lmstudio", "LM Studio (localhost:1234)")
+           .setValue("")
+           .onChange(async (v) => {
+             if (v === "ollama") this.plugin.settings.summaryBaseUrl = "http://localhost:11434/v1";
+             else if (v === "lmstudio") this.plugin.settings.summaryBaseUrl = "http://localhost:1234/v1";
+             await this.plugin.saveSettings();
+             this.display();
+           });
+        });
       new Setting(containerEl).setName(t.summaryBaseUrl).setDesc(t.summaryBaseUrlDesc)
         .addText((tx) => tx.setPlaceholder(t.summaryBaseUrlPlaceholder).setValue(this.plugin.settings.summaryBaseUrl)
           .onChange(async (v) => { this.plugin.settings.summaryBaseUrl = v.trim(); await this.plugin.saveSettings(); }));
-      new Setting(containerEl).setName(t.summaryModel).setDesc(t.summaryModelDesc)
-        .addText((tx) => tx.setPlaceholder(t.summaryModelPlaceholder).setValue(this.plugin.settings.summaryModel)
-          .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); }));
+      const modelSetting = new Setting(containerEl).setName(t.summaryModel).setDesc(t.summaryModelDesc);
+      const renderModelControl = (models: string[] | null) => {
+        modelSetting.controlEl.empty();
+        if (models && models.length > 0) {
+          new DropdownComponent(modelSetting.controlEl)
+            .addOptions(Object.fromEntries([[" ", t.summaryModelSelect], ...models.map((m) => [m, m])]))
+            .setValue(this.plugin.settings.summaryModel || " ")
+            .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); });
+        } else {
+          new TextComponent(modelSetting.controlEl)
+            .setPlaceholder(t.summaryModelPlaceholder)
+            .setValue(this.plugin.settings.summaryModel)
+            .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); });
+        }
+        const btn = modelSetting.controlEl.createEl("button", { text: t.summaryModelFetch });
+        btn.style.marginLeft = "8px";
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          btn.setText(t.summaryModelFetching);
+          try {
+            const fetched = await this.plugin.fetchAvailableModels(this.plugin.settings.summaryBaseUrl);
+            renderModelControl(fetched);
+          } catch (e) {
+            console.error("[repo-notes] fetchAvailableModels failed:", e);
+            renderModelControl(null);
+          }
+        });
+      };
+      renderModelControl(null);
       this.addApiKeySetting(containerEl, t.summaryApiKey, t.summaryApiKeyDesc, t.summaryApiKeyPlaceholder,
         () => this.plugin.settings.summaryApiKey,
         async (v) => { this.plugin.settings.summaryApiKey = v; await this.plugin.saveSettings(); });
