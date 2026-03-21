@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Obsidian plugin** that imports GitHub starred repositories and own repositories (including organization repos) as structured Markdown notes with YAML frontmatter. Integrates with GitHub API and Anthropic Claude API for README summarization.
+**Obsidian plugin** that imports GitHub starred repositories, own repositories, and organization repos as structured Markdown notes with YAML frontmatter. Supports AI-powered README summarization via Anthropic Claude or any OpenAI-compatible API (Ollama, LM Studio, vLLM, etc.).
 
 ## Commands
 
@@ -16,7 +16,9 @@ npm test             # Vitest でユニットテストを実行
 npm run test:watch   # ウォッチモードでテストを実行
 ```
 
-テストは **Vitest** で実装。`src/__tests__/` にテストファイル、`src/__mocks__/obsidian.ts` に Obsidian API のモックを配置。Docker で実行する場合は `docker compose run --rm test`。
+Docker で実行する場合は `docker compose run --rm build` / `docker compose run --rm test`。
+
+テストファイルは `src/__tests__/`、Obsidian API のモックは `src/__mocks__/obsidian.ts`。
 
 ### Vault へのシンボリックリンク（ライブ開発）
 
@@ -37,16 +39,17 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
   - **Main Plugin** (`RepoNotesPlugin extends Plugin`) — `onload`, `loadSettings`, `saveSettings`, `syncProfile`, `syncRepoList` などコアロジック
   - **Settings Tab** (`RepoNotesSettingTab extends PluginSettingTab`) — プロファイル管理UI
   - **Modals** (`SyncModal` など) — 同期進捗表示UI
+  - **Pure utility functions** — テスト用にエクスポートされた純粋関数（後述）
 
 ## Key implementation notes
 
 - **HTTP通信は必ず `requestUrl`（Obsidian API）を使うこと。** ブラウザの `fetch` はObsidianのサンドボックスで動作しない。
 
-- **i18n**: `src/i18n.ts` の `getT()` で翻訳オブジェクトを取得する。ロケール検出は `window.moment.locale().startsWith("ja")` で行う。翻訳キーには文字列の他に関数も含まれるため、`T` 型を使うこと。
+- **i18n**: `src/i18n.ts` の `getT(lang: Lang): T` で翻訳オブジェクトを取得する。プラグインの `get t()` は `resolveUiLang(this.settings.uiLang, momentLocale)` を通じて言語を解決する。`uiLang` は `"auto" | "en" | "ja"` で、`"auto"` のときは `window.moment.locale()` でObsidianのロケールを動的検出する。
 
-- **設定マイグレーション**: `loadSettings()` に旧シングルアカウント形式（`githubToken` を直接持つ形式）から `profiles[]` 配列形式へのマイグレーションロジックがある。新しい設定フィールドを追加する際は同様にマイグレーションを考慮すること。
+- **設定マイグレーション**: `loadSettings()` に旧シングルアカウント形式から `profiles[]` 配列形式へのマイグレーションロジックがある。新しい設定フィールドを追加する際は同様にマイグレーションを考慮すること。新フィールドが `data.json` に存在しない場合のデフォルト補完も必要。
 
-- **Anthropic API キー** は `RepoNotesSettings.anthropicApiKey` に保存される（vault の `.obsidian/plugins/repo-notes/data.json`）。
+- **AIプロバイダー**: `summaryProvider: "anthropic" | "openai-compatible"` で切り替える。`summarizeReadme()` がディスパッチャーとなり、`summarizeReadmeAnthropic()` または `summarizeReadmeOpenAI()` を呼ぶ。OpenAI互換は `/v1/chat/completions` エンドポイントを使用。`checkCanSummarize()` で要約可能かを判定。
 
 - **コミット数取得**はバッチ処理（10件並列）で行われる（GitHub API レート制限対策）。
 
@@ -54,8 +57,29 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 - **`obsidian` モジュールは external**（esbuildがバンドルしない）。Obsidianランタイムが提供するため、importは型定義のみの目的で使う。
 
+## Exported pure functions (テスト用)
+
+ユニットテストのために以下の関数が `src/main.ts` からエクスポートされている：
+
+| 関数 | 用途 |
+|---|---|
+| `resolveUiLang(uiLang, momentLocale)` | `uiLang` 設定値とObsidianロケールから実際の言語を返す |
+| `checkCanSummarize(settings)` | 現在の設定でAI要約が実行可能かを返す |
+| `buildNote(profile, item, ...)` | ノートのMarkdown文字列を生成する |
+| `sanitizeFilename(name)` | ファイル名に使えない文字をハイフンに変換する |
+| `defaultProfile(id, name)` | デフォルト値で Profile オブジェクトを生成する |
+
 ## Release
 
-`.github/workflows/release.yml` により、タグプッシュ時に GitHub Actions で自動リリース。リリース成果物: `main.js`, `manifest.json`, `styles.css`。
+タグをプッシュすると `.github/workflows/release.yml` が起動し、自動でリリースと CHANGELOG.md 更新PRを作成する。
 
-タグ形式は **`v` プレフィックスなし**（例: `1.0.0`）。`v1.0.0` ではワークフローが発火しない。
+```bash
+# 1. manifest.json のバージョンを更新 → PR → mainにマージ
+# 2. タグをプッシュ（v プレフィックスなし）
+git tag 1.0.2
+git push origin 1.0.2
+```
+
+- タグ形式は **`v` プレフィックスなし**（`v1.0.0` ではワークフローが発火しない）
+- リリース成果物: `main.js`, `manifest.json`, `styles.css`, `repo-notes.zip`
+- リリース後に `chore/changelog-<version>` ブランチのPRが自動作成されるのでマージする
