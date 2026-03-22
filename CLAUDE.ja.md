@@ -54,6 +54,8 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 - **AIプロバイダー**: `summaryProvider: "anthropic" | "openai-compatible"` で切り替える。`summarizeReadme()` がディスパッチャーとなり、`summarizeReadmeAnthropic()` または `summarizeReadmeOpenAI()` を呼ぶ。OpenAI互換は `/v1/chat/completions` エンドポイントを使用。`checkCanSummarize()` で要約可能かを判定。
 
+- **Sync と AI要約の責務分離**: `syncCurrentNote()` は AI を呼ばない。既存の `## Summary` セクションを `extractSummary()` で読み取って保持する。`summarizeCurrentNote()` は GitHub からリポジトリメタデータを再取得しない。フロントマターから `GitHubRepo` オブジェクトを再構築し、README のフェッチと AI のみ実行する。APIコストを予測可能に保つための設計。
+
 - **コミット数取得**はバッチ処理（10件並列）で行われる（GitHub API レート制限対策）。
 
 - **TypeScript制約**: `tsconfig.json` の `lib` が `["ES6", "DOM"]`、`target` が `ES6` で固定されている。TypeScript 5系（`^5.3.0`）を使用しており `moduleResolution: bundler` が有効だが、`Array.prototype.includes` などES2016以降のメソッドは型エラーになるため `indexOf` 等で代替すること。
@@ -71,6 +73,8 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 | `buildNote(profile, item, ...)` | ノートのMarkdown文字列を生成する |
 | `sanitizeFilename(name)` | ファイル名に使えない文字をハイフンに変換する |
 | `defaultProfile(id, name)` | デフォルト値で Profile オブジェクトを生成する |
+| `extractMemo(content)` | ノート本文から `## Memo` セクションを抽出する |
+| `extractSummary(content)` | ノート本文から `## Summary` セクションを抽出する（末尾空白除去済み） |
 
 ## Git ワークフロー
 
@@ -79,6 +83,7 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 - **新ブランチは必ず `main` から作成すること**。古いブランチから切るとマージ済み変更がdiffに混入する。
 - コミット後は `git push origin <branch>` → `gh pr create` の流れで進める。
 - スカッシュマージ後のブランチ削除は `git branch -D`（`-d` では "not fully merged" エラーになる）。
+- **PRを出す前に `CLAUDE.md` と `CLAUDE.ja.md` を更新すること**（振る舞い・アーキテクチャ・エクスポート関数が変わった場合）。
 
 ## Obsidian プラグイン審査（obsidianmd/obsidian-releases）
 
