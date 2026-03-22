@@ -11,8 +11,12 @@ Import your GitHub **starred repositories**, **own repositories**, and **organiz
 - 🏢 **Organizations** — sync repos from specified GitHub organizations
 - 👤 **Multi-profile** — manage multiple GitHub accounts as separate profiles
 - 🗂 **Rich frontmatter** — URL, description, language, stars, forks, commits, last updated, topics as tags
+- 👁 **Hide/show properties** — keep data fetched but hide individual frontmatter fields from notes
 - 🤖 **AI README summary** — summarize READMEs via Anthropic Claude, Ollama, LM Studio, vLLM, or any OpenAI-compatible API
 - 📄 **Raw README** — embed full README content in notes
+- 🔄 **Differential sync** — skips notes that haven't changed since last sync
+- 📝 **Per-note commands** — sync or AI-summarize a single note from the command palette
+- 📊 **Rate limit display** — shows GitHub API usage in the sync modal and command palette
 - 🌐 **i18n** — UI switches automatically between English and Japanese based on Obsidian's locale
 
 ## Installation
@@ -142,14 +146,27 @@ The `OpenAI-compatible` provider works with any server that implements the `/v1/
 
 Select **English** or **Japanese** for the generated summaries, regardless of the README's original language.
 
+## Command palette
+
+| Command | Description |
+|---|---|
+| `Sync all repos` | Open the sync modal and sync all profiles |
+| `Sync this note` | Re-sync the currently open repo note (no AI) |
+| `Summarize this note` | Run AI summarization on the currently open repo note |
+| `Check API rate limit` | Show remaining GitHub API calls as a notice |
+| `Open settings` | Open the Repo Notes settings tab |
+
+> **Sync vs. Summarize**: "Sync this note" preserves the existing AI summary without calling the AI again. "Summarize this note" fetches a fresh README and runs AI, without re-syncing other metadata.
+
 ## Development
 
 ```bash
 git clone https://github.com/<you>/obsidian-repo-notes
 cd obsidian-repo-notes
-npm install
-npm run dev        # watch mode
-npm run build      # production build
+docker compose run --rm build         # type check + production build
+docker compose run --rm test          # run unit tests
+docker compose run --rm lint          # ESLint
+docker compose run --rm format-check  # Prettier
 ```
 
 Symlink the repo into your vault's plugin folder for live development:
@@ -177,8 +194,12 @@ GitHubの**Starしたリポジトリ**・**自分のリポジトリ**・**Organi
 - 🏢 **Organization** — 指定したOrganizationのリポジトリを同期
 - 👤 **マルチプロファイル** — 複数のGitHubアカウントをプロファイルで管理
 - 🗂 **リッチなフロントマター** — URL、説明文、言語、Star数、Fork数、コミット数、最終更新日、トピックをタグとして保存
+- 👁 **プロパティの表示/非表示** — データは取得しつつ、フロントマターの各項目を非表示にできる
 - 🤖 **AI README要約** — Anthropic Claude・Ollama・LM Studio・vLLM・OpenAI互換APIでREADMEを自動要約
 - 📄 **README全文埋め込み** — READMEの全文をノートに含める
+- 🔄 **差分同期** — 前回sync以降に変更がないノートはスキップ
+- 📝 **ノート単体コマンド** — コマンドパレットから1件だけsyncまたはAI要約できる
+- 📊 **レート制限表示** — syncモーダルとコマンドパレットでGitHub APIの残り使用量を確認
 - 🌐 **多言語対応** — ObsidianのロケールにあわせてUIが日英自動切り替え
 
 ## インストール
@@ -308,14 +329,27 @@ ollama pull llama3.2
 
 生成される要約の言語を **英語** または **日本語** から選択できます。元のREADMEの言語に関わらず指定した言語で出力されます。
 
+## コマンドパレット
+
+| コマンド | 説明 |
+|---|---|
+| `Sync all repos` | syncモーダルを開いて全プロファイルを同期 |
+| `Sync this note` | 開いているrepoノートを1件だけ再sync（AI呼び出しなし） |
+| `Summarize this note` | 開いているrepoノートのAI要約を実行 |
+| `Check API rate limit` | GitHubのAPI残り使用量をNoticeで表示 |
+| `Open settings` | Repo Notesの設定タブを開く |
+
+> **Sync と Summarize の違い**: "Sync this note" は既存のAI要約を保持したままメタデータを更新します（AI呼び出しなし）。"Summarize this note" はREADMEを取得してAIで要約を生成します（メタデータの再同期なし）。
+
 ## 開発
 
 ```bash
 git clone https://github.com/<you>/obsidian-repo-notes
 cd obsidian-repo-notes
-npm install
-npm run dev        # ウォッチモード
-npm run build      # 本番ビルド
+docker compose run --rm build         # 型チェック + 本番ビルド
+docker compose run --rm test          # ユニットテスト
+docker compose run --rm lint          # ESLint
+docker compose run --rm format-check  # Prettier
 ```
 
 ライブ開発用にVaultのプラグインフォルダへシンボリックリンクを作成：
