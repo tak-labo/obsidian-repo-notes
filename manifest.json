@@ -1,7 +1,7 @@
 {
   "id": "repo-notes",
   "name": "Repo Notes",
-  "version": "1.1.1-beta.6",
+  "version": "1.1.1-rc.1",
   "minAppVersion": "0.15.0",
   "description": "Import GitHub starred repos and your own repositories as structured notes.",
   "author": "Takahiro",
