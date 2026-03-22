@@ -189,6 +189,33 @@ export default class RepoNotesPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "check-rate-limit",
+      name: "Check GitHub API rate limit",
+      callback: () => {
+        const profile = this.settings.profiles.find((p) => p.githubToken);
+        if (!profile) {
+          new Notice(this.t.noticeNoToken(""));
+          return;
+        }
+        void (async () => {
+          try {
+            const { remaining, limit, reset } = await this.fetchRateLimit(profile.githubToken);
+            const LOW_THRESHOLD = Math.floor(limit * 0.1);
+            const t = this.t;
+            if (remaining < LOW_THRESHOLD) {
+              const resetTime = new Date(reset * 1000).toLocaleTimeString();
+              new Notice(t.rateLimitWarn(remaining, limit, resetTime));
+            } else {
+              new Notice(t.rateLimit(remaining, limit));
+            }
+          } catch (e) {
+            new Notice(this.t.rateLimitError);
+          }
+        })();
+      },
+    });
+
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;

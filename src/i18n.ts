@@ -22,6 +22,7 @@ const translations = {
     rateLimitWarn: (remaining: number, limit: number, resetTime: string) =>
       `⚠️ API limit low: ${remaining} / ${limit} — resets at ${resetTime}`,
     rateLimitError: "Could not check API rate limit",
+    checkRateLimit: "Check GitHub API rate limit",
     statTotal: "TOTAL",
     statSaved: "SAVED",
     statSkipped: "SKIPPED",
@@ -163,6 +164,7 @@ const translations = {
     rateLimitWarn: (remaining: number, limit: number, resetTime: string) =>
       `⚠️ API残量が少ない: ${remaining} / ${limit} — ${resetTime}にリセット`,
     rateLimitError: "APIレート制限を確認できませんでした",
+    checkRateLimit: "GitHub APIレート制限を確認",
     statTotal: "合計",
     statSaved: "保存",
     statSkipped: "スキップ",
