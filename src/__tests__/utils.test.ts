@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { sanitizeFilename, buildNote, defaultProfile, checkCanSummarize, resolveUiLang, extractMemo, extractSummary } from "../main";
 import type { StarredItem, GitHubRepo } from "../main";
 
-// ─── テスト用フィクスチャ ─────────────────────────────────────────────────────
+// ─── Test fixtures ────────────────────────────────────────────────────────────
 
 const mockRepo: GitHubRepo = {
   full_name: "owner/my-repo",
@@ -45,20 +45,20 @@ describe("resolveUiLang", () => {
     expect(resolveUiLang("auto", "en-US")).toBe("en");
   });
 
-  it("auto + zh-TW → en（未対応言語はenにフォールバック）", () => {
+  it("auto + zh-TW → en (unsupported locale falls back to en)", () => {
     expect(resolveUiLang("auto", "zh-TW")).toBe("en");
   });
 
-  it("auto + 空文字 → en", () => {
+  it("auto + empty string → en", () => {
     expect(resolveUiLang("auto", "")).toBe("en");
   });
 
-  it("手動設定 en はlocaleに関わらず en を返す", () => {
+  it("manual en returns en regardless of locale", () => {
     expect(resolveUiLang("en", "ja")).toBe("en");
     expect(resolveUiLang("en", "ja-JP")).toBe("en");
   });
 
-  it("手動設定 ja はlocaleに関わらず ja を返す", () => {
+  it("manual ja returns ja regardless of locale", () => {
     expect(resolveUiLang("ja", "en")).toBe("ja");
     expect(resolveUiLang("ja", "en-US")).toBe("ja");
   });
@@ -67,7 +67,7 @@ describe("resolveUiLang", () => {
 // ─── checkCanSummarize ────────────────────────────────────────────────────────
 
 describe("checkCanSummarize", () => {
-  it("Anthropicプロバイダー: APIキーあり → true", () => {
+  it("Anthropic provider with API key → true", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "anthropic",
@@ -78,7 +78,7 @@ describe("checkCanSummarize", () => {
     ).toBe(true);
   });
 
-  it("Anthropicプロバイダー: APIキーなし → false", () => {
+  it("Anthropic provider without API key → false", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "anthropic",
@@ -89,7 +89,7 @@ describe("checkCanSummarize", () => {
     ).toBe(false);
   });
 
-  it("OpenAI互換プロバイダー: BaseURLとモデルあり → true", () => {
+  it("OpenAI-compatible provider with base URL and model → true", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "openai-compatible",
@@ -100,7 +100,7 @@ describe("checkCanSummarize", () => {
     ).toBe(true);
   });
 
-  it("OpenAI互換プロバイダー: BaseURLなし → false", () => {
+  it("OpenAI-compatible provider without base URL → false", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "openai-compatible",
@@ -111,7 +111,7 @@ describe("checkCanSummarize", () => {
     ).toBe(false);
   });
 
-  it("OpenAI互換プロバイダー: モデルなし → false", () => {
+  it("OpenAI-compatible provider without model → false", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "openai-compatible",
@@ -122,7 +122,7 @@ describe("checkCanSummarize", () => {
     ).toBe(false);
   });
 
-  it("OpenAI互換プロバイダー: BaseURLとモデル両方なし → false", () => {
+  it("OpenAI-compatible provider without base URL or model → false", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "openai-compatible",
@@ -133,7 +133,7 @@ describe("checkCanSummarize", () => {
     ).toBe(false);
   });
 
-  it("OpenAI互換プロバイダー: APIキーなしでもBaseURL+モデルがあれば true（Ollama想定）", () => {
+  it("OpenAI-compatible provider with base URL and model but no API key → true (Ollama use case)", () => {
     expect(
       checkCanSummarize({
         summaryProvider: "openai-compatible",
@@ -148,16 +148,16 @@ describe("checkCanSummarize", () => {
 // ─── sanitizeFilename ─────────────────────────────────────────────────────────
 
 describe("sanitizeFilename", () => {
-  it("通常のファイル名はそのまま返す", () => {
+  it("returns plain filenames unchanged", () => {
     expect(sanitizeFilename("hello-world")).toBe("hello-world");
     expect(sanitizeFilename("my_repo")).toBe("my_repo");
   });
 
-  it("スラッシュをハイフンに変換する", () => {
+  it("converts slashes to hyphens", () => {
     expect(sanitizeFilename("owner/repo")).toBe("owner-repo");
   });
 
-  it("Windowsの禁止文字をハイフンに変換する", () => {
+  it("converts Windows-forbidden characters to hyphens", () => {
     expect(sanitizeFilename("repo:name")).toBe("repo-name");
     expect(sanitizeFilename("repo*name")).toBe("repo-name");
     expect(sanitizeFilename('repo"name')).toBe("repo-name");
@@ -166,11 +166,11 @@ describe("sanitizeFilename", () => {
     expect(sanitizeFilename("repo?name")).toBe("repo-name");
   });
 
-  it("バックスラッシュをハイフンに変換する", () => {
+  it("converts backslashes to hyphens", () => {
     expect(sanitizeFilename("repo\\name")).toBe("repo-name");
   });
 
-  it("Obsidian特有の禁止文字をハイフンに変換する", () => {
+  it("converts Obsidian-forbidden characters to hyphens", () => {
     expect(sanitizeFilename("repo#name")).toBe("repo-name");
     expect(sanitizeFilename("repo^name")).toBe("repo-name");
     expect(sanitizeFilename("repo[name]")).toBe("repo-name-");
@@ -180,13 +180,13 @@ describe("sanitizeFilename", () => {
 // ─── defaultProfile ───────────────────────────────────────────────────────────
 
 describe("defaultProfile", () => {
-  it("指定したidとnameでプロファイルを生成する", () => {
+  it("creates a profile with the given id and name", () => {
     const p = defaultProfile("abc123", "Personal");
     expect(p.id).toBe("abc123");
     expect(p.name).toBe("Personal");
   });
 
-  it("デフォルト値が正しく設定されている", () => {
+  it("sets correct default values", () => {
     const p = defaultProfile("id", "name");
     expect(p.githubToken).toBe("");
     expect(p.syncStars).toBe(true);
@@ -209,7 +209,7 @@ describe("defaultProfile", () => {
 describe("buildNote", () => {
   const profile = defaultProfile("test-id", "Personal");
 
-  it("YAMLフロントマターを含むMarkdownを生成する", () => {
+  it("generates Markdown with YAML frontmatter", () => {
     const note = buildNote(profile, mockStarredItem);
     expect(note).toContain("---");
     expect(note).toContain('repo: "owner/my-repo"');
@@ -217,22 +217,22 @@ describe("buildNote", () => {
     expect(note).toContain('profile: "Personal"');
   });
 
-  it("デフォルトはstarsモードでsource: starredを出力する", () => {
+  it("defaults to stars mode with source: starred", () => {
     const note = buildNote(profile, mockStarredItem);
     expect(note).toContain("source: starred");
   });
 
-  it("mineモードでsource: my-repoを出力する", () => {
+  it("mine mode outputs source: my-repo", () => {
     const note = buildNote(profile, mockStarredItem, -1, null, null, "mine");
     expect(note).toContain("source: my-repo");
   });
 
-  it("orgモードでsource: org-repoを出力する", () => {
+  it("org mode outputs source: org-repo", () => {
     const note = buildNote(profile, mockStarredItem, -1, null, null, "org");
     expect(note).toContain("source: org-repo");
   });
 
-  it("includeStats=trueで言語・Star数・Fork数を含む", () => {
+  it("includeStats=true includes language, stars, and forks", () => {
     const p = { ...profile, includeStats: true };
     const note = buildNote(p, mockStarredItem);
     expect(note).toContain("language: TypeScript");
@@ -240,7 +240,7 @@ describe("buildNote", () => {
     expect(note).toContain("forks: 10");
   });
 
-  it("includeStats=falseで言語・Star数・Fork数を含まない", () => {
+  it("includeStats=false excludes language, stars, and forks", () => {
     const p = { ...profile, includeStats: false };
     const note = buildNote(p, mockStarredItem);
     expect(note).not.toContain("language:");
@@ -248,55 +248,55 @@ describe("buildNote", () => {
     expect(note).not.toContain("forks:");
   });
 
-  it("includeTopics=trueでトピックをタグとして含む", () => {
+  it("includeTopics=true includes topics as tags", () => {
     const p = { ...profile, includeTopics: true };
     const note = buildNote(p, mockStarredItem);
     expect(note).toContain('tags: ["obsidian", "plugin"]');
   });
 
-  it("includeTopics=falseでタグを含まない", () => {
+  it("includeTopics=false excludes tags", () => {
     const p = { ...profile, includeTopics: false };
     const note = buildNote(p, mockStarredItem);
     expect(note).not.toContain("tags:");
   });
 
-  it("includeDescription=trueで説明文を含む", () => {
+  it("includeDescription=true includes description", () => {
     const p = { ...profile, includeDescription: true };
     const note = buildNote(p, mockStarredItem);
     expect(note).toContain('description: "A test repository"');
   });
 
-  it("includeDescription=falseで説明文を含まない", () => {
+  it("includeDescription=false excludes description", () => {
     const p = { ...profile, includeDescription: false };
     const note = buildNote(p, mockStarredItem);
     expect(note).not.toContain("description:");
   });
 
-  it("commitCountが0以上のとき commits を含む", () => {
+  it("includes commits when commitCount >= 0", () => {
     const p = { ...profile, includeCommitCount: true };
     const note = buildNote(p, mockStarredItem, 42);
     expect(note).toContain("commits: 42");
   });
 
-  it("commitCountが-1のとき commits を含まない", () => {
+  it("excludes commits when commitCount is -1", () => {
     const p = { ...profile, includeCommitCount: true };
     const note = buildNote(p, mockStarredItem, -1);
     expect(note).not.toContain("commits:");
   });
 
-  it("includeStarredDate=trueでstarred_atを含む", () => {
+  it("includeStarredDate=true includes starred_at", () => {
     const p = { ...profile, includeStarredDate: true };
     const note = buildNote(p, mockStarredItem);
     expect(note).toContain("starred_at: 2024-11-15");
   });
 
-  it("includeLastUpdated=trueでlast_updatedを含む", () => {
+  it("includeLastUpdated=true includes last_updated", () => {
     const p = { ...profile, includeLastUpdated: true };
     const note = buildNote(p, mockStarredItem);
     expect(note).toContain("last_updated: 2024-06-01");
   });
 
-  it("説明文中のダブルクォートをエスケープする", () => {
+  it("escapes double quotes in description", () => {
     const repoWithQuote = { ...mockRepo, description: 'He said "hello"' };
     const item: StarredItem = { starred_at: undefined, repo: repoWithQuote };
     const p = { ...profile, includeDescription: true };
@@ -304,43 +304,43 @@ describe("buildNote", () => {
     expect(note).toContain('description: "He said \\"hello\\""');
   });
 
-  it("homepageがあればwebsiteを含む", () => {
+  it("includes website when homepage is set", () => {
     const repoWithHome = { ...mockRepo, homepage: "https://example.com" };
     const item: StarredItem = { repo: repoWithHome };
     const note = buildNote(profile, item);
     expect(note).toContain('website: "https://example.com"');
   });
 
-  it("mineモードでPrivate/Publicバッジを含む", () => {
+  it("mine mode includes Private/Public badge", () => {
     const note = buildNote(profile, mockStarredItem, -1, null, null, "mine");
     expect(note).toContain("> 🔒 Public");
   });
 
-  it("READMEサマリーを含む", () => {
+  it("includes README summary section", () => {
     const p = { ...profile, includeReadmeExcerpt: true };
     const note = buildNote(p, mockStarredItem, -1, "This is a summary.", null);
     expect(note).toContain("## Summary");
     expect(note).toContain("This is a summary.");
   });
 
-  it("README全文を含む", () => {
+  it("includes raw README section", () => {
     const p = { ...profile, includeReadmeRaw: true };
     const note = buildNote(p, mockStarredItem, -1, null, "# Full README");
     expect(note).toContain("## README");
     expect(note).toContain("# Full README");
   });
 
-  it("常に ## Memo セクションを含む", () => {
+  it("always includes ## Memo section", () => {
     const note = buildNote(profile, mockStarredItem);
     expect(note).toContain("## Memo");
   });
 
-  it("existingMemo を保持する", () => {
+  it("preserves existingMemo content", () => {
     const note = buildNote(profile, mockStarredItem, -1, null, null, "stars", null, "my preserved note\n");
     expect(note).toContain("my preserved note");
   });
 
-  it("summaryMeta を frontmatter に記録する", () => {
+  it("writes summaryMeta to frontmatter", () => {
     const note = buildNote(profile, mockStarredItem, -1, "summary text", null, "stars", {
       provider: "anthropic",
       model: "claude-haiku-4-5-20251001",
@@ -349,7 +349,7 @@ describe("buildNote", () => {
     expect(note).toContain("summary_model: claude-haiku-4-5-20251001");
   });
 
-  it("Memo セクションが Summary より前に来る", () => {
+  it("Memo section appears before Summary section", () => {
     const p = { ...profile, includeReadmeExcerpt: true };
     const note = buildNote(p, mockStarredItem, -1, "ai summary", null, "stars", null, "memo text\n");
     const memoIdx = note.indexOf("## Memo");
@@ -411,21 +411,21 @@ describe("buildNote hiddenProps", () => {
 // ─── extractMemo ──────────────────────────────────────────────────────────────
 
 describe("extractMemo", () => {
-  it("Memo セクションがない場合は空文字を返す", () => {
+  it("returns empty string when Memo section is absent", () => {
     expect(extractMemo("---\nfoo: bar\n---\n## Summary\ntext")).toBe("");
   });
 
-  it("Memo の内容を抽出する", () => {
+  it("extracts Memo content", () => {
     const content = "---\n---\n## Memo\nmy note\n\n## Summary\nai text";
     expect(extractMemo(content)).toBe("my note\n\n");
   });
 
-  it("ファイル末尾の Memo を抽出する", () => {
+  it("extracts Memo at end of file", () => {
     const content = "---\n---\n## Memo\nmy note here";
     expect(extractMemo(content)).toContain("my note here");
   });
 
-  it("空の Memo セクションの場合", () => {
+  it("returns newline for empty Memo section", () => {
     const content = "---\n---\n## Memo\n\n## Summary\ntext";
     expect(extractMemo(content)).toBe("\n");
   });
@@ -434,21 +434,21 @@ describe("extractMemo", () => {
 // ─── extractSummary ───────────────────────────────────────────────────────────
 
 describe("extractSummary", () => {
-  it("Summary セクションがない場合は空文字を返す", () => {
+  it("returns empty string when Summary section is absent", () => {
     expect(extractSummary("---\nfoo: bar\n---\n## Memo\ntext")).toBe("");
   });
 
-  it("Summary の内容を抽出する", () => {
+  it("extracts Summary content", () => {
     const content = "---\n---\n## Memo\n\n## Summary\nai generated text\n\n## README\nraw";
     expect(extractSummary(content)).toBe("ai generated text");
   });
 
-  it("ファイル末尾の Summary を抽出する", () => {
+  it("extracts Summary at end of file", () => {
     const content = "---\n---\n## Memo\n\n## Summary\nonly summary here";
     expect(extractSummary(content)).toBe("only summary here");
   });
 
-  it("複数行の Summary を抽出する", () => {
+  it("extracts multi-line Summary", () => {
     const content = "---\n---\n## Summary\nline one\nline two\n\n## README\nraw";
     expect(extractSummary(content)).toBe("line one\nline two");
   });
