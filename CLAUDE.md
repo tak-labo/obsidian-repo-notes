@@ -54,6 +54,8 @@ Two source files:
 
 - **AI providers**: Switch via `summaryProvider: "anthropic" | "openai-compatible"`. `summarizeReadme()` dispatches to `summarizeReadmeAnthropic()` or `summarizeReadmeOpenAI()`. OpenAI-compatible uses the `/v1/chat/completions` endpoint. Use `checkCanSummarize()` to determine if summarization is available.
 
+- **Sync vs. AI summarize separation**: `syncCurrentNote()` never calls AI — it preserves the existing `## Summary` section via `extractSummary()`. `summarizeCurrentNote()` never re-fetches repo metadata from GitHub — it reconstructs the `GitHubRepo` object from the note's frontmatter and only fetches the README for AI. This keeps API costs predictable.
+
 - **Commit count fetching** is batched (10 parallel) to respect GitHub API rate limits.
 
 - **TypeScript constraints**: `tsconfig.json` sets `lib: ["ES6", "DOM"]` and `target: "ES6"`. TypeScript 5.x (`^5.3.0`) with `moduleResolution: bundler` is used, but methods like `Array.prototype.includes` (ES2016+) cause type errors — use `indexOf` etc. as alternatives.
@@ -71,6 +73,8 @@ The following functions are exported from `src/main.ts` for unit testing:
 | `buildNote(profile, item, ...)` | Generates the note Markdown string |
 | `sanitizeFilename(name)` | Converts characters invalid in filenames to hyphens |
 | `defaultProfile(id, name)` | Creates a Profile object with default values |
+| `extractMemo(content)` | Extracts the `## Memo` section from note content |
+| `extractSummary(content)` | Extracts the `## Summary` section from note content (trimmed) |
 
 ## Git workflow
 
@@ -79,6 +83,7 @@ The following functions are exported from `src/main.ts` for unit testing:
 - **Always cut new branches from `main`**. Branching from old branches causes merged changes to appear in diffs.
 - After committing: `git push origin <branch>` → `gh pr create`.
 - After squash merge, delete branches with `git branch -D` (`-d` gives "not fully merged" error).
+- **Update `CLAUDE.md` and `CLAUDE.ja.md` before opening a PR** when behavior, architecture, or exported functions change.
 
 ## Obsidian plugin review (obsidianmd/obsidian-releases)
 
