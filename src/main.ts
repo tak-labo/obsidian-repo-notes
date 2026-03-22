@@ -170,6 +170,19 @@ export default class RepoNotesPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "summarize-current-note",
+      name: "AI summarize this repo note",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return false;
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        if (!fm?.repo || !fm?.source || !fm?.profile) return false;
+        if (!checking) void this.summarizeCurrentNote(file);
+        return true;
+      },
+    });
+
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;
@@ -181,6 +194,14 @@ export default class RepoNotesPlugin extends Plugin {
             .setIcon("refresh-cw")
             .onClick(() => {
               void this.syncCurrentNote(file);
+            })
+        );
+        menu.addItem((menuItem) =>
+          menuItem
+            .setTitle(this.t.summarizeThisNote)
+            .setIcon("sparkles")
+            .onClick(() => {
+              void this.summarizeCurrentNote(file);
             })
         );
       })
@@ -422,6 +443,95 @@ export default class RepoNotesPlugin extends Plugin {
       await this.app.vault.modify(file, content);
 
       new Notice(t.noticeSyncedNote(fullName));
+    } catch (e) {
+      new Notice(t.noticeError((e as Error).message));
+    }
+  }
+
+  async summarizeCurrentNote(file: TFile): Promise<void> {
+    const t = this.t;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const fullName = fm?.repo as string | undefined;
+    const source = fm?.source as string | undefined;
+    const profileName = fm?.profile as string | undefined;
+
+    if (!fullName || !source || !profileName) {
+      new Notice(t.noticeNotARepoNote);
+      return;
+    }
+
+    if (!checkCanSummarize(this.settings)) {
+      new Notice(t.noticeAiNotConfigured);
+      return;
+    }
+
+    const profile = this.settings.profiles.find((p) => p.name === profileName);
+    if (!profile?.githubToken) {
+      new Notice(t.noticeNoToken(profileName));
+      return;
+    }
+
+    let mode: "stars" | "mine" | "org";
+    if (source === "starred") {
+      mode = "stars";
+    } else if (source === "org-repo") {
+      mode = "org";
+    } else {
+      mode = "mine";
+    }
+
+    new Notice(t.noticeSummarizingNote(fullName));
+
+    try {
+      const repo = await this.fetchSingleRepo(profile.githubToken, fullName);
+      const starredAt = source === "starred" ? (fm?.starred_at as string | undefined) : undefined;
+      const item: StarredItem = starredAt ? { starred_at: starredAt, repo } : { repo };
+
+      let commitCount = -1;
+      if (profile.includeCommitCount) {
+        try {
+          commitCount = await this.fetchCommitCount(
+            profile.githubToken,
+            fullName,
+            repo.default_branch ?? "main"
+          );
+        } catch {
+          commitCount = -1;
+        }
+      }
+
+      const readmeRaw = await this.fetchReadme(profile.githubToken, fullName);
+      const readmeSummary = readmeRaw ? await this.summarizeReadme(readmeRaw, fullName) : null;
+
+      const summaryMeta = readmeSummary
+        ? {
+            provider: this.settings.summaryProvider,
+            model:
+              this.settings.summaryProvider === "anthropic"
+                ? this.settings.anthropicModel
+                : this.settings.summaryModel,
+          }
+        : null;
+
+      const existingContent = await this.app.vault.read(file);
+      const existingMemo = extractMemo(existingContent);
+
+      // Force includeReadmeExcerpt true so the summary is rendered in the note
+      const forceProfile = { ...profile, includeReadmeExcerpt: true };
+
+      const content = buildNote(
+        forceProfile,
+        item,
+        commitCount,
+        readmeSummary,
+        profile.includeReadmeRaw ? readmeRaw : null,
+        mode,
+        summaryMeta,
+        existingMemo
+      );
+      await this.app.vault.modify(file, content);
+
+      new Notice(t.noticeSummarizedNote(fullName));
     } catch (e) {
       new Notice(t.noticeError((e as Error).message));
     }

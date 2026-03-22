@@ -132,6 +132,10 @@ const translations = {
     noticeSyncingNote: (name: string) => `Repo Notes: Syncing ${name}...`,
     noticeSyncedNote: (name: string) => `Repo Notes: Synced ${name}`,
     noticeNotARepoNote: "This note is not a repo note",
+    summarizeThisNote: "AI summarize this repo note",
+    noticeSummarizingNote: (name: string) => `Repo Notes: Summarizing ${name}...`,
+    noticeSummarizedNote: (name: string) => `Repo Notes: Summarized ${name}`,
+    noticeAiNotConfigured: "⚠️ AI summarization is not configured",
   },
 
   ja: {
@@ -265,6 +269,10 @@ const translations = {
     noticeSyncingNote: (name: string) => `Repo Notes: ${name} を同期中...`,
     noticeSyncedNote: (name: string) => `Repo Notes: ${name} を同期しました`,
     noticeNotARepoNote: "このノートはリポジトリノートではありません",
+    summarizeThisNote: "このリポジトリノートをAI要約",
+    noticeSummarizingNote: (name: string) => `Repo Notes: ${name} を要約中...`,
+    noticeSummarizedNote: (name: string) => `Repo Notes: ${name} を要約しました`,
+    noticeAiNotConfigured: "⚠️ AI要約が設定されていません",
   },
 } as const;
 
