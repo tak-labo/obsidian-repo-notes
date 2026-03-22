@@ -97,7 +97,9 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
   - `console.log` 禁止 → `console.debug/warn/error` を使う
   - UIテキストはsentence case（固有名詞除く）
   - `@ts-ignore` 禁止 → `@ts-expect-error -- <reason>` を使う
-- **コメントはすべて英語**（Obsidian コミュニティレビュアーが英語話者のため）
+- **`src/main.ts` と `src/i18n.ts` のコメントはすべて英語**（Obsidian コミュニティレビュアーが英語話者のため）
+- **関数名・引数はすべてのファイルで英語**（2バイト文字を識別子・引数に混入させない）
+- テストファイル（`src/__tests__/`）のコメントは日本語 OK
 
 ## リリース
 

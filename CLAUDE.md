@@ -97,7 +97,9 @@ The following functions are exported from `src/main.ts` for unit testing:
   - No `console.log` → use `console.debug/warn/error`
   - UI text must be sentence case (except proper nouns)
   - No `@ts-ignore` → use `@ts-expect-error -- <reason>`
-- **All comments must be in English** (Obsidian community reviewers are English speakers)
+- **All comments in `src/main.ts` and `src/i18n.ts` must be in English** (Obsidian community reviewers are English speakers)
+- **Function names and string arguments must always be in English** across all files (avoid 2-byte characters in identifiers and arguments)
+- Test file comments (`src/__tests__/`) may be in Japanese
 
 ## Release
 
