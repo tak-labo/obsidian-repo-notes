@@ -48,7 +48,7 @@ export interface Profile {
   myReposFolderParent: string;
   myReposIncludeForks: boolean;
   myReposIncludePrivate: boolean;
-  orgNames: string[];       // comma-separated org logins to sync
+  orgNames: string[]; // comma-separated org logins to sync
   includeDescription: boolean;
   includeTopics: boolean;
   includeStats: boolean;
@@ -58,6 +58,11 @@ export interface Profile {
   includeReadmeRaw: boolean;
   includeReadmeExcerpt: boolean;
   overwriteExisting: boolean;
+  lastSyncedAt?: {
+    stars?: string;
+    mine?: string;
+    orgs?: { [orgLogin: string]: string };
+  };
 }
 
 interface RepoNotesSettings {
@@ -78,22 +83,37 @@ interface RepoNotesSettings {
 
 export function defaultProfile(id: string, name: string): Profile {
   return {
-    id, name, githubToken: "",
-    syncStars: true, starsFolder: "GitHub Stars", starsFolderParent: "",
-    syncMyRepos: false, myReposFolder: "My Repos", myReposFolderParent: "",
-    myReposIncludeForks: false, myReposIncludePrivate: true,
+    id,
+    name,
+    githubToken: "",
+    syncStars: true,
+    starsFolder: "GitHub Stars",
+    starsFolderParent: "",
+    syncMyRepos: false,
+    myReposFolder: "My Repos",
+    myReposFolderParent: "",
+    myReposIncludeForks: false,
+    myReposIncludePrivate: true,
     orgNames: [],
-    includeDescription: true, includeTopics: true, includeStats: true,
-    includeStarredDate: true, includeCommitCount: true, includeLastUpdated: true,
-    includeReadmeRaw: false, includeReadmeExcerpt: false, overwriteExisting: true,
+    includeDescription: true,
+    includeTopics: true,
+    includeStats: true,
+    includeStarredDate: true,
+    includeCommitCount: true,
+    includeLastUpdated: true,
+    includeReadmeRaw: false,
+    includeReadmeExcerpt: false,
+    overwriteExisting: true,
   };
 }
 
 const DEFAULT_SETTINGS: RepoNotesSettings = {
   profiles: [defaultProfile("default", "Personal")],
-  anthropicApiKey: "", readmeSummaryLang: "en",
+  anthropicApiKey: "",
+  readmeSummaryLang: "en",
   uiLang: "auto",
-  autoSyncOnStartup: false, autoSyncProfileId: "",
+  autoSyncOnStartup: false,
+  autoSyncProfileId: "",
   summaryProvider: "anthropic",
   anthropicModel: "claude-haiku-4-5-20251001",
   summaryBaseUrl: "",
@@ -130,9 +150,9 @@ export default class RepoNotesPlugin extends Plugin {
       id: "open-settings",
       name: "Open settings",
       callback: () => {
-        // @ts-ignore
+        // @ts-expect-error -- Obsidian internal API
         this.app.setting.open();
-        // @ts-ignore
+        // @ts-expect-error -- Obsidian internal API
         this.app.setting.openTabById("repo-notes");
       },
     });
@@ -200,7 +220,9 @@ export default class RepoNotesPlugin extends Plugin {
     }
   }
 
-  async saveSettings() { await this.saveData(this.settings); }
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 
   // ─── Core Sync ───────────────────────────────────────────────────────────────
 
@@ -208,28 +230,81 @@ export default class RepoNotesPlugin extends Plugin {
     profile: Profile,
     onProgress: (msg: string) => void,
     onResult?: (saved: number, skipped: number, errors: number, total: number) => void,
-    shouldAbort?: () => boolean
+    shouldAbort?: () => boolean,
+    forceSync = false
   ) {
-    let totalSaved = 0, totalSkipped = 0, totalErrors = 0, totalCount = 0;
+    let totalSaved = 0,
+      totalSkipped = 0,
+      totalErrors = 0,
+      totalCount = 0;
     const acc = (s: number, sk: number, e: number, t: number) => {
-      totalSaved += s; totalSkipped += sk; totalErrors += e; totalCount += t;
+      totalSaved += s;
+      totalSkipped += sk;
+      totalErrors += e;
+      totalCount += t;
     };
     if (profile.syncStars) {
-      if (shouldAbort?.()) { onResult?.(totalSaved, totalSkipped, totalErrors, totalCount); return; }
+      if (shouldAbort?.()) {
+        onResult?.(totalSaved, totalSkipped, totalErrors, totalCount);
+        return;
+      }
       const parts = [profile.starsFolderParent, profile.starsFolder].filter(Boolean);
-      await this.syncRepoList(profile, "stars", parts.join("/") || "GitHub Stars", onProgress, acc, undefined, shouldAbort);
+      await this.syncRepoList(
+        profile,
+        "stars",
+        parts.join("/") || "GitHub Stars",
+        onProgress,
+        acc,
+        undefined,
+        shouldAbort,
+        forceSync
+      );
     }
     if (profile.syncMyRepos) {
-      if (shouldAbort?.()) { onResult?.(totalSaved, totalSkipped, totalErrors, totalCount); return; }
+      if (shouldAbort?.()) {
+        onResult?.(totalSaved, totalSkipped, totalErrors, totalCount);
+        return;
+      }
       const parts = [profile.myReposFolderParent, profile.myReposFolder].filter(Boolean);
-      await this.syncRepoList(profile, "mine", parts.join("/") || "My Repos", onProgress, acc, undefined, shouldAbort);
+      await this.syncRepoList(
+        profile,
+        "mine",
+        parts.join("/") || "My Repos",
+        onProgress,
+        acc,
+        undefined,
+        shouldAbort,
+        forceSync
+      );
     }
-    for (const org of (profile.orgNames ?? [])) {
+    for (const org of profile.orgNames ?? []) {
       if (shouldAbort?.()) break;
       const orgLogin = org.trim();
       if (!orgLogin) continue;
       const parts = [profile.myReposFolderParent, orgLogin].filter(Boolean);
-      await this.syncRepoList(profile, "org", parts.join("/") || orgLogin, onProgress, acc, orgLogin, shouldAbort);
+      await this.syncRepoList(
+        profile,
+        "org",
+        parts.join("/") || orgLogin,
+        onProgress,
+        acc,
+        orgLogin,
+        shouldAbort,
+        forceSync
+      );
+    }
+    if (!shouldAbort?.()) {
+      const syncedAt = new Date().toISOString();
+      if (!profile.lastSyncedAt) profile.lastSyncedAt = {};
+      if (profile.syncStars) profile.lastSyncedAt.stars = syncedAt;
+      if (profile.syncMyRepos) profile.lastSyncedAt.mine = syncedAt;
+      for (const org of profile.orgNames ?? []) {
+        const orgLogin = org.trim();
+        if (!orgLogin) continue;
+        if (!profile.lastSyncedAt.orgs) profile.lastSyncedAt.orgs = {};
+        profile.lastSyncedAt.orgs[orgLogin] = syncedAt;
+      }
+      await this.saveSettings();
     }
     onResult?.(totalSaved, totalSkipped, totalErrors, totalCount);
   }
@@ -241,7 +316,8 @@ export default class RepoNotesPlugin extends Plugin {
     onProgress: (msg: string) => void,
     onResult?: (saved: number, skipped: number, errors: number, total: number) => void,
     orgLogin?: string,
-    shouldAbort?: () => boolean
+    shouldAbort?: () => boolean,
+    forceSync = false
   ) {
     const t = this.t;
     if (!profile.githubToken) {
@@ -249,32 +325,55 @@ export default class RepoNotesPlugin extends Plugin {
       return;
     }
 
-    let saved = 0, skipped = 0, errors = 0;
+    let saved = 0,
+      skipped = 0,
+      errors = 0;
     const label = mode === "stars" ? t.labelStars : mode === "org" ? `Org: ${orgLogin}` : t.labelMine;
 
     try {
       onProgress(t.progressFetching(profile.name, label));
-      const items = mode === "stars"
-        ? await this.fetchAllStars(profile.githubToken)
-        : mode === "org"
-          ? await this.fetchOrgRepos(profile.githubToken, orgLogin!, profile.myReposIncludeForks)
-          : await this.fetchMyRepos(profile.githubToken, profile.myReposIncludeForks, profile.myReposIncludePrivate);
+      const items =
+        mode === "stars"
+          ? await this.fetchAllStars(profile.githubToken)
+          : mode === "org"
+            ? await this.fetchOrgRepos(profile.githubToken, orgLogin!, profile.myReposIncludeForks)
+            : await this.fetchMyRepos(profile.githubToken, profile.myReposIncludeForks, profile.myReposIncludePrivate);
 
       const total = items.length;
       onProgress(t.progressFetched(profile.name, label, total));
       await this.ensureFolder(folder);
 
+      const lastSyncedAtStr =
+        mode === "stars"
+          ? profile.lastSyncedAt?.stars
+          : mode === "mine"
+            ? profile.lastSyncedAt?.mine
+            : profile.lastSyncedAt?.orgs?.[orgLogin ?? ""];
+      const lastSyncedAt = !forceSync && lastSyncedAtStr ? new Date(lastSyncedAtStr) : null;
+
       const commitCounts = new Map<string, number>();
       if (profile.includeCommitCount) {
         onProgress(t.progressCommits(profile.name));
         const repos = items.map((i) => (i.repo ?? i) as unknown as GitHubRepo);
-        for (let b = 0; b < repos.length; b += 10) {
-          await Promise.all(repos.slice(b, b + 10).map(async (repo) => {
-            try {
-              commitCounts.set(repo.full_name, await this.fetchCommitCount(profile.githubToken, repo.full_name, repo.default_branch ?? "main"));
-            } catch { commitCounts.set(repo.full_name, -1); }
-          }));
-          onProgress(t.progressCommitsN(profile.name, Math.min(b + 10, repos.length), repos.length));
+        const reposToFetch = repos.filter((repo) => {
+          if (!lastSyncedAt) return true;
+          const repoUpdatedAt = repo.pushed_at ?? repo.updated_at;
+          return !repoUpdatedAt || new Date(repoUpdatedAt) > lastSyncedAt;
+        });
+        for (let b = 0; b < reposToFetch.length; b += 10) {
+          await Promise.all(
+            reposToFetch.slice(b, b + 10).map(async (repo) => {
+              try {
+                commitCounts.set(
+                  repo.full_name,
+                  await this.fetchCommitCount(profile.githubToken, repo.full_name, repo.default_branch ?? "main")
+                );
+              } catch {
+                commitCounts.set(repo.full_name, -1);
+              }
+            })
+          );
+          onProgress(t.progressCommitsN(profile.name, Math.min(b + 10, reposToFetch.length), reposToFetch.length));
         }
       }
 
@@ -289,19 +388,54 @@ export default class RepoNotesPlugin extends Plugin {
 
         try {
           const exists = this.app.vault.getAbstractFileByPath(fpath) instanceof TFile;
-          if (exists && !profile.overwriteExisting) { skipped++; continue; }
+          if (exists && !profile.overwriteExisting) {
+            skipped++;
+            continue;
+          }
+
+          const repoUpdatedAt = repo.pushed_at ?? repo.updated_at;
+          const isUpdated =
+            forceSync || !exists || !lastSyncedAt || !repoUpdatedAt || new Date(repoUpdatedAt) > lastSyncedAt;
 
           let readmeRaw: string | null = null;
           let readmeSummary: string | null = null;
-          if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
+          if (isUpdated && (profile.includeReadmeRaw || profile.includeReadmeExcerpt)) {
             readmeRaw = await this.fetchReadme(profile.githubToken, repo.full_name);
           }
           const canSummarize = checkCanSummarize(this.settings);
-          if (profile.includeReadmeExcerpt && canSummarize && readmeRaw) {
+          if (isUpdated && profile.includeReadmeExcerpt && canSummarize && readmeRaw) {
             readmeSummary = await this.summarizeReadme(readmeRaw, repo.full_name);
           }
 
-          const content = this.buildNote(profile, item, commitCounts.get(repo.full_name) ?? -1, readmeSummary, readmeRaw, mode);
+          const summaryMeta = readmeSummary
+            ? {
+                provider: this.settings.summaryProvider,
+                model:
+                  this.settings.summaryProvider === "anthropic"
+                    ? this.settings.anthropicModel
+                    : this.settings.summaryModel,
+              }
+            : null;
+
+          let existingMemo = "";
+          if (exists) {
+            const existingFile = this.app.vault.getAbstractFileByPath(fpath);
+            if (existingFile instanceof TFile) {
+              const existingContent = await this.app.vault.read(existingFile);
+              existingMemo = extractMemo(existingContent);
+            }
+          }
+
+          const content = buildNote(
+            profile,
+            item,
+            commitCounts.get(repo.full_name) ?? -1,
+            readmeSummary,
+            readmeRaw,
+            mode,
+            summaryMeta,
+            existingMemo
+          );
           if (exists) {
             const existingFile = this.app.vault.getAbstractFileByPath(fpath);
             if (existingFile instanceof TFile) {
@@ -364,7 +498,7 @@ export default class RepoNotesPlugin extends Plugin {
       page++;
       if (data.length < 100) break;
     }
-    return repos.map((repo) => ({ repo } as StarredItem));
+    return repos.map((repo) => ({ repo }) as StarredItem);
   }
 
   private async fetchOrgRepos(token: string, org: string, includeForks: boolean): Promise<StarredItem[]> {
@@ -385,7 +519,7 @@ export default class RepoNotesPlugin extends Plugin {
       page++;
       if (data.length < 100) break;
     }
-    return repos.map((repo) => ({ repo } as StarredItem));
+    return repos.map((repo) => ({ repo }) as StarredItem);
   }
 
   private async fetchCommitCount(token: string, fullName: string, branch: string): Promise<number> {
@@ -409,10 +543,12 @@ export default class RepoNotesPlugin extends Plugin {
         headers: { Authorization: `token ${token}`, Accept: "application/vnd.github.raw+json" },
       });
       if (res.status !== 200) return null;
-      const text = typeof res.text === "string" ? res.text
-        : res.json?.content ? atob(res.json.content.replace(/\n/g, "")) : null;
+      const text =
+        typeof res.text === "string" ? res.text : res.json?.content ? atob(res.json.content.replace(/\n/g, "")) : null;
       return text ? text.slice(0, 6000) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   private async summarizeReadme(readmeText: string, repoName: string): Promise<string | null> {
@@ -437,7 +573,12 @@ export default class RepoNotesPlugin extends Plugin {
         body: JSON.stringify({
           model: this.settings.anthropicModel || "claude-haiku-4-5-20251001",
           max_tokens: 400,
-          messages: [{ role: "user", content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. No preamble.\n\n---\n${readmeText}` }],
+          messages: [
+            {
+              role: "user",
+              content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. No preamble.\n\n---\n${readmeText}`,
+            },
+          ],
         }),
       });
       if (res.status !== 200) {
@@ -468,8 +609,15 @@ export default class RepoNotesPlugin extends Plugin {
           model: this.settings.summaryModel,
           max_tokens: 4000,
           messages: [
-            { role: "system", content: "You are a concise summarizer. Output only the final summary. No thinking, no preamble, no explanation." },
-            { role: "user", content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. Reply only in ${lang}.\n\n---\n${readmeText}` },
+            {
+              role: "system",
+              content:
+                "You are a concise summarizer. Output only the final summary. No thinking, no preamble, no explanation.",
+            },
+            {
+              role: "user",
+              content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. Reply only in ${lang}.\n\n---\n${readmeText}`,
+            },
           ],
         }),
       });
@@ -478,8 +626,12 @@ export default class RepoNotesPlugin extends Plugin {
         return null;
       }
       const msg = res.json?.choices?.[0]?.message;
-      const text = (msg?.content || null);
-      if (!text) console.warn("[repo-notes] OpenAI-compatible: unexpected response shape", JSON.stringify(res.json?.choices?.[0]));
+      const text = msg?.content || null;
+      if (!text)
+        console.warn(
+          "[repo-notes] OpenAI-compatible: unexpected response shape",
+          JSON.stringify(res.json?.choices?.[0])
+        );
       return text;
     } catch (e) {
       console.error("[repo-notes] OpenAI-compatible API request failed:", e);
@@ -511,7 +663,14 @@ export default class RepoNotesPlugin extends Plugin {
 
   // ─── Note Builder ────────────────────────────────────────────────────────────
 
-  buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
+  buildNote(
+    profile: Profile,
+    item: StarredItem,
+    commitCount = -1,
+    readmeSummary: string | null = null,
+    readmeRaw: string | null = null,
+    mode: "stars" | "mine" | "org" = "stars"
+  ): string {
     return buildNote(profile, item, commitCount, readmeSummary, readmeRaw, mode);
   }
 
@@ -542,17 +701,36 @@ export function resolveUiLang(uiLang: "auto" | Lang, momentLocale: string): Lang
   return uiLang;
 }
 
-export function checkCanSummarize(settings: Pick<RepoNotesSettings, "summaryProvider" | "summaryBaseUrl" | "summaryModel" | "anthropicApiKey">): boolean {
+export function checkCanSummarize(
+  settings: Pick<RepoNotesSettings, "summaryProvider" | "summaryBaseUrl" | "summaryModel" | "anthropicApiKey">
+): boolean {
   return settings.summaryProvider === "openai-compatible"
     ? !!(settings.summaryBaseUrl && settings.summaryModel)
     : !!settings.anthropicApiKey;
 }
 
-export function buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
+export function extractMemo(content: string): string {
+  const memoStart = content.indexOf("## Memo\n");
+  if (memoStart === -1) return "";
+  const afterMemo = content.slice(memoStart + "## Memo\n".length);
+  const nextHeading = afterMemo.search(/^## /m);
+  return nextHeading === -1 ? afterMemo : afterMemo.slice(0, nextHeading);
+}
+
+export function buildNote(
+  profile: Profile,
+  item: StarredItem,
+  commitCount = -1,
+  readmeSummary: string | null = null,
+  readmeRaw: string | null = null,
+  mode: "stars" | "mine" | "org" = "stars",
+  summaryMeta: { provider: string; model: string } | null = null,
+  existingMemo = ""
+): string {
   const repo = (item.repo ?? item) as GitHubRepo;
   const starredAt = item.starred_at ?? null;
   const now = new Date().toISOString().split("T")[0];
-  const fmtDate = (iso: string | null | undefined) => iso ? iso.split("T")[0] : null;
+  const fmtDate = (iso: string | null | undefined) => (iso ? iso.split("T")[0] : null);
   const lastUpdated = fmtDate(repo.pushed_at ?? repo.updated_at);
 
   const fm: string[] = ["---"];
@@ -572,14 +750,25 @@ export function buildNote(profile: Profile, item: StarredItem, commitCount = -1,
   if (profile.includeLastUpdated && lastUpdated) fm.push(`last_updated: ${lastUpdated}`);
   if (profile.includeStarredDate && starredAt) fm.push(`starred_at: ${starredAt.split("T")[0]}`);
   fm.push(`synced_at: ${now}`);
-  if (profile.includeTopics && repo.topics?.length)
-    fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
+  if (summaryMeta) {
+    fm.push(`summary_provider: ${summaryMeta.provider}`);
+    fm.push(`summary_model: ${summaryMeta.model}`);
+  }
+  if (profile.includeTopics && repo.topics?.length) fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
   fm.push("---\n");
 
   const lines: string[] = [];
   if (mode === "mine") lines.push(`> 🔒 ${repo.private ? "Private" : "Public"}\n`);
-  if (profile.includeReadmeExcerpt && readmeSummary) { lines.push("## Summary"); lines.push(readmeSummary + "\n"); }
-  if (profile.includeReadmeRaw && readmeRaw) { lines.push("## README"); lines.push(readmeRaw + "\n"); }
+  lines.push("## Memo");
+  lines.push(existingMemo || "\n");
+  if (profile.includeReadmeExcerpt && readmeSummary) {
+    lines.push("## Summary");
+    lines.push(readmeSummary + "\n");
+  }
+  if (profile.includeReadmeRaw && readmeRaw) {
+    lines.push("## README");
+    lines.push(readmeRaw + "\n");
+  }
 
   return fm.join("\n") + lines.join("\n");
 }
@@ -617,17 +806,20 @@ class SyncModal extends Modal {
     let selectedProfileId = this.initialProfileId ?? profiles[0]?.id ?? "";
 
     if (profiles.length > 1) {
-      new Setting(contentEl).setName(t.modalProfile).setDesc(t.modalProfileDesc)
+      new Setting(contentEl)
+        .setName(t.modalProfile)
+        .setDesc(t.modalProfileDesc)
         .addDropdown((drop) => {
           for (const p of profiles) drop.addOption(p.id, p.name);
           drop.setValue(selectedProfileId);
-          drop.onChange((v) => { selectedProfileId = v; });
+          drop.onChange((v) => {
+            selectedProfileId = v;
+          });
         });
     }
 
     const progressWrap = contentEl.createDiv("gs-progress-wrap");
     this.progressEl = progressWrap.createDiv("gs-status-text");
-    this.progressEl.setText(t.modalReady);
     this.progressBar = progressWrap.createDiv("gs-track").createDiv("gs-fill");
 
     this.statsEl = contentEl.createDiv("gs-stats");
@@ -636,10 +828,11 @@ class SyncModal extends Modal {
 
     const btnRow = contentEl.createDiv("gs-btn-row");
     const syncBtn = btnRow.createEl("button", { text: t.modalSyncBtn, cls: "mod-cta" });
+    const forceBtn = btnRow.createEl("button", { text: t.modalForceSyncBtn });
     const abortBtn = btnRow.createEl("button", { text: t.modalAbort });
     abortBtn.addClass("repo-notes-hidden");
 
-    syncBtn.addEventListener("click", () => {
+    const runSync = (forceSync: boolean) => {
       void (async () => {
         if (this.running) return;
         const profile = this.plugin.settings.profiles.find((p) => p.id === selectedProfileId);
@@ -648,6 +841,7 @@ class SyncModal extends Modal {
         this.running = true;
         this.aborted = false;
         syncBtn.addClass("repo-notes-hidden");
+        forceBtn.addClass("repo-notes-hidden");
         abortBtn.removeClass("repo-notes-hidden");
         abortBtn.disabled = false;
         abortBtn.setText(t.modalAbort);
@@ -667,15 +861,25 @@ class SyncModal extends Modal {
             this.progressBar.setCssProps({ "--gs-fill-width": "100%" });
             this.showStats(saved, skipped, errors, total);
           },
-          () => this.aborted
+          () => this.aborted,
+          forceSync
         );
 
         this.running = false;
         abortBtn.addClass("repo-notes-hidden");
         syncBtn.removeClass("repo-notes-hidden");
+        forceBtn.removeClass("repo-notes-hidden");
         syncBtn.setText(t.modalResync);
         if (this.aborted) this.progressEl.setText(t.modalAborted);
       })();
+    };
+
+    syncBtn.addEventListener("click", () => runSync(false));
+
+    forceBtn.addEventListener("click", () => {
+      const ok = window.confirm(t.modalForceSyncConfirm);
+      if (!ok) return;
+      runSync(true);
     });
 
     abortBtn.addEventListener("click", () => {
@@ -688,14 +892,28 @@ class SyncModal extends Modal {
     closeBtn.addEventListener("click", () => this.close());
 
     const profile = profiles.find((p) => p.id === selectedProfileId);
-    if (profile?.githubToken) syncBtn.click();
-    else this.progressEl.setText(t.modalNoToken);
+    if (profile?.githubToken) {
+      const lastSynced = profile.lastSyncedAt;
+      const dates: string[] = [];
+      if (lastSynced?.stars) dates.push(`Stars: ${lastSynced.stars.split("T")[0]}`);
+      if (lastSynced?.mine) dates.push(`Mine: ${lastSynced.mine.split("T")[0]}`);
+      const label = dates.length > 0 ? `${t.modalReady} (${t.lastSynced(dates.join(", "))})` : t.modalReady;
+      this.progressEl.setText(label);
+      syncBtn.click();
+    } else {
+      this.progressEl.setText(t.modalNoToken);
+    }
   }
 
   appendLog(msg: string) {
     const line = this.logEl.createDiv("gs-log-line");
-    line.addClass(msg.includes("error") || msg.includes("エラー") || msg.includes("Error") ? "gs-log-err"
-      : msg.includes("skipped") || msg.includes("スキップ") ? "gs-log-skip" : "gs-log-ok");
+    line.addClass(
+      msg.includes("error") || msg.includes("エラー") || msg.includes("Error")
+        ? "gs-log-err"
+        : msg.includes("skipped") || msg.includes("スキップ")
+          ? "gs-log-skip"
+          : "gs-log-ok"
+    );
     line.setText(msg);
     this.logEl.scrollTop = this.logEl.scrollHeight;
   }
@@ -705,8 +923,10 @@ class SyncModal extends Modal {
     this.statsEl.removeClass("repo-notes-hidden");
     this.statsEl.empty();
     for (const s of [
-      { label: t.statTotal, value: total }, { label: t.statSaved, value: saved },
-      { label: t.statSkipped, value: skipped }, { label: t.statError, value: errors },
+      { label: t.statTotal, value: total },
+      { label: t.statSaved, value: saved },
+      { label: t.statSkipped, value: skipped },
+      { label: t.statError, value: errors },
     ]) {
       const card = this.statsEl.createDiv("gs-stat-card");
       card.createDiv("gs-stat-val").setText(String(s.value));
@@ -714,7 +934,9 @@ class SyncModal extends Modal {
     }
   }
 
-  onClose() { this.contentEl.empty(); }
+  onClose() {
+    this.contentEl.empty();
+  }
 }
 
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
@@ -741,20 +963,24 @@ class RepoNotesSettingTab extends PluginSettingTab {
     }
 
     // ── 言語設定（最上部）────────────────────────────────────────────────
-    new Setting(containerEl).setName("Language / 言語")
-      .addDropdown((d) =>
-        d.addOption("auto", "Auto (follow Obsidian)").addOption("en", "English").addOption("ja", "日本語")
-          .setValue(this.plugin.settings.uiLang)
-          .onChange(async (v) => {
-            this.plugin.settings.uiLang = v as "auto" | Lang;
-            await this.plugin.saveSettings();
-            this.display();
-          })
-      );
+    new Setting(containerEl).setName("Language / 言語").addDropdown((d) =>
+      d
+        .addOption("auto", "Auto (follow Obsidian)")
+        .addOption("en", "English")
+        .addOption("ja", "日本語")
+        .setValue(this.plugin.settings.uiLang)
+        .onChange(async (v) => {
+          this.plugin.settings.uiLang = v as "auto" | Lang;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+    );
 
     // ── プロファイルタブ ──────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionProfiles).setHeading();
-    const tabRow = containerEl.createDiv({ attr: { style: "display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;" } });
+    const tabRow = containerEl.createDiv({
+      attr: { style: "display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;" },
+    });
 
     const renderTabs = () => {
       tabRow.empty();
@@ -762,13 +988,21 @@ class RepoNotesSettingTab extends PluginSettingTab {
         const isActive = p.id === this.activeProfileId;
         const btn = tabRow.createEl("button", {
           text: p.name,
-          attr: { style: `padding:4px 14px; border-radius:6px; border:1px solid var(--color-border-tertiary); cursor:pointer; font-size:13px; background:${isActive ? "var(--interactive-accent)" : "var(--background-secondary)"}; color:${isActive ? "var(--text-on-accent)" : "var(--text-normal)"};` },
+          attr: {
+            style: `padding:4px 14px; border-radius:6px; border:1px solid var(--color-border-tertiary); cursor:pointer; font-size:13px; background:${isActive ? "var(--interactive-accent)" : "var(--background-secondary)"}; color:${isActive ? "var(--text-on-accent)" : "var(--text-normal)"};`,
+          },
         });
-        btn.addEventListener("click", () => { this.activeProfileId = p.id; this.display(); });
+        btn.addEventListener("click", () => {
+          this.activeProfileId = p.id;
+          this.display();
+        });
       }
       const addBtn = tabRow.createEl("button", {
         text: t.addProfile,
-        attr: { style: "padding:4px 14px; border-radius:6px; border:1px dashed var(--color-border-secondary); cursor:pointer; font-size:13px;" },
+        attr: {
+          style:
+            "padding:4px 14px; border-radius:6px; border:1px dashed var(--color-border-secondary); cursor:pointer; font-size:13px;",
+        },
       });
       addBtn.addEventListener("click", () => {
         void (async () => {
@@ -785,50 +1019,112 @@ class RepoNotesSettingTab extends PluginSettingTab {
     const profile = this.plugin.settings.profiles.find((p) => p.id === this.activeProfileId);
     if (!profile) return;
 
-    const nameRow = new Setting(containerEl).setName(t.profileName)
-      .addText((tx) => tx.setValue(profile.name).onChange(async (v) => {
-        profile.name = v || "Unnamed"; await this.plugin.saveSettings(); renderTabs();
-      }));
+    const nameRow = new Setting(containerEl).setName(t.profileName).addText((tx) =>
+      tx.setValue(profile.name).onChange(async (v) => {
+        profile.name = v || "Unnamed";
+        await this.plugin.saveSettings();
+        renderTabs();
+      })
+    );
     if (this.plugin.settings.profiles.length > 1) {
-      nameRow.addButton((btn) => btn.setButtonText(t.profileDelete).setWarning().onClick(async () => {
-        this.plugin.settings.profiles = this.plugin.settings.profiles.filter((p) => p.id !== profile.id);
-        this.activeProfileId = this.plugin.settings.profiles[0]?.id ?? "";
-        await this.plugin.saveSettings(); this.display();
-      }));
+      nameRow.addButton((btn) =>
+        btn
+          .setButtonText(t.profileDelete)
+          .setWarning()
+          .onClick(async () => {
+            this.plugin.settings.profiles = this.plugin.settings.profiles.filter((p) => p.id !== profile.id);
+            this.activeProfileId = this.plugin.settings.profiles[0]?.id ?? "";
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionAuth).setHeading();
-    new Setting(containerEl).setName(t.tokenName).setDesc(t.tokenDesc)
-      .addText((tx) => tx.setPlaceholder(t.tokenPlaceholder).setValue(profile.githubToken)
-        .onChange(async (v) => { profile.githubToken = v.trim(); await this.plugin.saveSettings(); }));
+    new Setting(containerEl)
+      .setName(t.tokenName)
+      .setDesc(t.tokenDesc)
+      .addText((tx) =>
+        tx
+          .setPlaceholder(t.tokenPlaceholder)
+          .setValue(profile.githubToken)
+          .onChange(async (v) => {
+            profile.githubToken = v.trim();
+            await this.plugin.saveSettings();
+          })
+      );
 
     // ── Stars ─────────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionStars).setHeading();
-    new Setting(containerEl).setName(t.syncStars)
-      .addToggle((tg) => tg.setValue(profile.syncStars).onChange(async (v) => { profile.syncStars = v; await this.plugin.saveSettings(); }));
-    this.addFolderSetting(containerEl, t.starsFolder, "", profile.starsFolder, profile.starsFolderParent,
-      async (tv, dv) => { if (tv !== null) profile.starsFolder = tv; if (dv !== null) profile.starsFolderParent = dv; await this.plugin.saveSettings(); });
+    new Setting(containerEl).setName(t.syncStars).addToggle((tg) =>
+      tg.setValue(profile.syncStars).onChange(async (v) => {
+        profile.syncStars = v;
+        await this.plugin.saveSettings();
+      })
+    );
+    this.addFolderSetting(
+      containerEl,
+      t.starsFolder,
+      "",
+      profile.starsFolder,
+      profile.starsFolderParent,
+      async (tv, dv) => {
+        if (tv !== null) profile.starsFolder = tv;
+        if (dv !== null) profile.starsFolderParent = dv;
+        await this.plugin.saveSettings();
+      }
+    );
 
     // ── My Repos ──────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionMyRepos).setHeading();
-    new Setting(containerEl).setName(t.syncMyRepos)
-      .addToggle((tg) => tg.setValue(profile.syncMyRepos).onChange(async (v) => { profile.syncMyRepos = v; await this.plugin.saveSettings(); }));
-    this.addFolderSetting(containerEl, t.myReposFolder, "", profile.myReposFolder, profile.myReposFolderParent,
-      async (tv, dv) => { if (tv !== null) profile.myReposFolder = tv; if (dv !== null) profile.myReposFolderParent = dv; await this.plugin.saveSettings(); });
-    new Setting(containerEl).setName(t.includeForks).setDesc(t.includeForksDesc)
-      .addToggle((tg) => tg.setValue(profile.myReposIncludeForks).onChange(async (v) => { profile.myReposIncludeForks = v; await this.plugin.saveSettings(); }));
-    new Setting(containerEl).setName(t.includePrivate)
-      .addToggle((tg) => tg.setValue(profile.myReposIncludePrivate).onChange(async (v) => { profile.myReposIncludePrivate = v; await this.plugin.saveSettings(); }));
+    new Setting(containerEl).setName(t.syncMyRepos).addToggle((tg) =>
+      tg.setValue(profile.syncMyRepos).onChange(async (v) => {
+        profile.syncMyRepos = v;
+        await this.plugin.saveSettings();
+      })
+    );
+    this.addFolderSetting(
+      containerEl,
+      t.myReposFolder,
+      "",
+      profile.myReposFolder,
+      profile.myReposFolderParent,
+      async (tv, dv) => {
+        if (tv !== null) profile.myReposFolder = tv;
+        if (dv !== null) profile.myReposFolderParent = dv;
+        await this.plugin.saveSettings();
+      }
+    );
+    new Setting(containerEl)
+      .setName(t.includeForks)
+      .setDesc(t.includeForksDesc)
+      .addToggle((tg) =>
+        tg.setValue(profile.myReposIncludeForks).onChange(async (v) => {
+          profile.myReposIncludeForks = v;
+          await this.plugin.saveSettings();
+        })
+      );
+    new Setting(containerEl).setName(t.includePrivate).addToggle((tg) =>
+      tg.setValue(profile.myReposIncludePrivate).onChange(async (v) => {
+        profile.myReposIncludePrivate = v;
+        await this.plugin.saveSettings();
+      })
+    );
 
     // ── Organizations ─────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionOrgs).setHeading();
-    new Setting(containerEl).setName(t.orgNames).setDesc(t.orgNamesDesc)
+    new Setting(containerEl)
+      .setName(t.orgNames)
+      .setDesc(t.orgNamesDesc)
       .addTextArea((ta) => {
         ta.setPlaceholder(t.orgNamesPlaceholder)
           .setValue((profile.orgNames ?? []).join("\n"))
           .onChange(async (v) => {
-            profile.orgNames = v.split("\n").map((s) => s.trim()).filter(Boolean);
+            profile.orgNames = v
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean);
             await this.plugin.saveSettings();
           });
         ta.inputEl.addClass("repo-notes-full-width");
@@ -847,36 +1143,68 @@ class RepoNotesSettingTab extends PluginSettingTab {
       ["overwriteExisting", t.overwriteExisting, t.overwriteExistingDesc],
     ];
     for (const [key, name, desc] of toggles) {
-      new Setting(containerEl).setName(name).setDesc(desc)
-        .addToggle((tg) => tg.setValue(profile[key] as boolean).onChange(async (v) => {
-          (profile[key] as boolean) = v; await this.plugin.saveSettings();
-        }));
+      new Setting(containerEl)
+        .setName(name)
+        .setDesc(desc)
+        .addToggle((tg) =>
+          tg.setValue(profile[key] as boolean).onChange(async (v) => {
+            (profile[key] as boolean) = v;
+            await this.plugin.saveSettings();
+          })
+        );
     }
 
     // ── README ────────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionReadme).setHeading();
-    new Setting(containerEl).setName(t.includeReadmeRaw).setDesc(t.includeReadmeRawDesc)
-      .addToggle((tg) => tg.setValue(profile.includeReadmeRaw).onChange(async (v) => { profile.includeReadmeRaw = v; await this.plugin.saveSettings(); }));
-    new Setting(containerEl).setName(t.includeReadmeSummary).setDesc(t.includeReadmeSummaryDesc)
-      .addToggle((tg) => tg.setValue(profile.includeReadmeExcerpt).onChange(async (v) => { profile.includeReadmeExcerpt = v; await this.plugin.saveSettings(); }));
+    new Setting(containerEl)
+      .setName(t.includeReadmeRaw)
+      .setDesc(t.includeReadmeRawDesc)
+      .addToggle((tg) =>
+        tg.setValue(profile.includeReadmeRaw).onChange(async (v) => {
+          profile.includeReadmeRaw = v;
+          await this.plugin.saveSettings();
+        })
+      );
+    new Setting(containerEl)
+      .setName(t.includeReadmeSummary)
+      .setDesc(t.includeReadmeSummaryDesc)
+      .addToggle((tg) =>
+        tg.setValue(profile.includeReadmeExcerpt).onChange(async (v) => {
+          profile.includeReadmeExcerpt = v;
+          await this.plugin.saveSettings();
+        })
+      );
 
     // ── Shared ────────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionShared).setHeading();
-    new Setting(containerEl).setName(t.summaryProvider).setDesc(t.summaryProviderDesc)
+    new Setting(containerEl)
+      .setName(t.summaryProvider)
+      .setDesc(t.summaryProviderDesc)
       .addDropdown((d) =>
-        d.addOption("anthropic", "Anthropic (Claude)")
-         .addOption("openai-compatible", "OpenAI-compatible (Ollama, LM Studio, vLLM...)")
-         .setValue(this.plugin.settings.summaryProvider)
-         .onChange(async (v) => {
-           this.plugin.settings.summaryProvider = v as "anthropic" | "openai-compatible";
-           await this.plugin.saveSettings();
-           this.display();
-         })
+        /* eslint-disable obsidianmd/ui/sentence-case -- proper nouns: Anthropic, OpenAI, Ollama, LM Studio, vLLM */
+        d
+          .addOption("anthropic", "Anthropic (Claude)")
+          .addOption("openai-compatible", "OpenAI-compatible (Ollama, LM Studio, vLLM...)")
+          /* eslint-enable obsidianmd/ui/sentence-case */
+          .setValue(this.plugin.settings.summaryProvider)
+          .onChange(async (v) => {
+            this.plugin.settings.summaryProvider = v as "anthropic" | "openai-compatible";
+            await this.plugin.saveSettings();
+            this.display();
+          })
       );
     if (this.plugin.settings.summaryProvider === "anthropic") {
-      this.addApiKeySetting(containerEl, t.anthropicKey, t.anthropicKeyDesc, t.anthropicKeyPlaceholder,
+      this.addApiKeySetting(
+        containerEl,
+        t.anthropicKey,
+        t.anthropicKeyDesc,
+        t.anthropicKeyPlaceholder,
         () => this.plugin.settings.anthropicApiKey,
-        async (v) => { this.plugin.settings.anthropicApiKey = v; await this.plugin.saveSettings(); });
+        async (v) => {
+          this.plugin.settings.anthropicApiKey = v;
+          await this.plugin.saveSettings();
+        }
+      );
       const anthropicModelSetting = new Setting(containerEl).setName(t.anthropicModel).setDesc(t.anthropicModelDesc);
       const renderAnthropicModelControl = (models: string[] | null) => {
         anthropicModelSetting.controlEl.empty();
@@ -884,14 +1212,24 @@ class RepoNotesSettingTab extends PluginSettingTab {
           new DropdownComponent(anthropicModelSetting.controlEl)
             .addOptions(Object.fromEntries(models.map((m) => [m, m])))
             .setValue(this.plugin.settings.anthropicModel || models[0])
-            .onChange(async (v) => { this.plugin.settings.anthropicModel = v; await this.plugin.saveSettings(); });
+            .onChange(async (v) => {
+              this.plugin.settings.anthropicModel = v;
+              await this.plugin.saveSettings();
+            });
         } else {
           new TextComponent(anthropicModelSetting.controlEl)
+            // eslint-disable-next-line obsidianmd/ui/sentence-case -- model identifier, not UI text
             .setPlaceholder("claude-haiku-4-5-20251001")
             .setValue(this.plugin.settings.anthropicModel)
-            .onChange(async (v) => { this.plugin.settings.anthropicModel = v.trim(); await this.plugin.saveSettings(); });
+            .onChange(async (v) => {
+              this.plugin.settings.anthropicModel = v.trim();
+              await this.plugin.saveSettings();
+            });
         }
-        const btn = anthropicModelSetting.controlEl.createEl("button", { text: t.summaryModelFetch, cls: "repo-notes-model-btn" });
+        const btn = anthropicModelSetting.controlEl.createEl("button", {
+          text: t.summaryModelFetch,
+          cls: "repo-notes-model-btn",
+        });
         btn.addEventListener("click", () => {
           void (async () => {
             btn.disabled = true;
@@ -909,22 +1247,35 @@ class RepoNotesSettingTab extends PluginSettingTab {
       renderAnthropicModelControl(null);
     }
     if (this.plugin.settings.summaryProvider === "openai-compatible") {
-      new Setting(containerEl).setName(t.summaryPreset).setDesc(t.summaryPresetDesc)
+      new Setting(containerEl)
+        .setName(t.summaryPreset)
+        .setDesc(t.summaryPresetDesc)
         .addDropdown((d) => {
           d.addOption("", "Custom")
-           .addOption("ollama", "Ollama (localhost:11434)")
-           .addOption("lmstudio", "LM Studio (localhost:1234)")
-           .setValue("")
-           .onChange(async (v) => {
-             if (v === "ollama") this.plugin.settings.summaryBaseUrl = "http://localhost:11434/v1";
-             else if (v === "lmstudio") this.plugin.settings.summaryBaseUrl = "http://localhost:1234/v1";
-             await this.plugin.saveSettings();
-             this.display();
-           });
+            /* eslint-disable obsidianmd/ui/sentence-case -- proper nouns: Ollama, LM Studio */
+            .addOption("ollama", "Ollama (localhost:11434)")
+            .addOption("lmstudio", "LM Studio (localhost:1234)")
+            /* eslint-enable obsidianmd/ui/sentence-case */
+            .setValue("")
+            .onChange(async (v) => {
+              if (v === "ollama") this.plugin.settings.summaryBaseUrl = "http://localhost:11434/v1";
+              else if (v === "lmstudio") this.plugin.settings.summaryBaseUrl = "http://localhost:1234/v1";
+              await this.plugin.saveSettings();
+              this.display();
+            });
         });
-      new Setting(containerEl).setName(t.summaryBaseUrl).setDesc(t.summaryBaseUrlDesc)
-        .addText((tx) => tx.setPlaceholder(t.summaryBaseUrlPlaceholder).setValue(this.plugin.settings.summaryBaseUrl)
-          .onChange(async (v) => { this.plugin.settings.summaryBaseUrl = v.trim(); await this.plugin.saveSettings(); }));
+      new Setting(containerEl)
+        .setName(t.summaryBaseUrl)
+        .setDesc(t.summaryBaseUrlDesc)
+        .addText((tx) =>
+          tx
+            .setPlaceholder(t.summaryBaseUrlPlaceholder)
+            .setValue(this.plugin.settings.summaryBaseUrl)
+            .onChange(async (v) => {
+              this.plugin.settings.summaryBaseUrl = v.trim();
+              await this.plugin.saveSettings();
+            })
+        );
       const modelSetting = new Setting(containerEl).setName(t.summaryModel).setDesc(t.summaryModelDesc);
       const renderModelControl = (models: string[] | null) => {
         modelSetting.controlEl.empty();
@@ -932,14 +1283,23 @@ class RepoNotesSettingTab extends PluginSettingTab {
           new DropdownComponent(modelSetting.controlEl)
             .addOptions(Object.fromEntries([[" ", t.summaryModelSelect], ...models.map((m) => [m, m])]))
             .setValue(this.plugin.settings.summaryModel || " ")
-            .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); });
+            .onChange(async (v) => {
+              this.plugin.settings.summaryModel = v.trim();
+              await this.plugin.saveSettings();
+            });
         } else {
           new TextComponent(modelSetting.controlEl)
             .setPlaceholder(t.summaryModelPlaceholder)
             .setValue(this.plugin.settings.summaryModel)
-            .onChange(async (v) => { this.plugin.settings.summaryModel = v.trim(); await this.plugin.saveSettings(); });
+            .onChange(async (v) => {
+              this.plugin.settings.summaryModel = v.trim();
+              await this.plugin.saveSettings();
+            });
         }
-        const btn = modelSetting.controlEl.createEl("button", { text: t.summaryModelFetch, cls: "repo-notes-model-btn" });
+        const btn = modelSetting.controlEl.createEl("button", {
+          text: t.summaryModelFetch,
+          cls: "repo-notes-model-btn",
+        });
         btn.addEventListener("click", () => {
           void (async () => {
             btn.disabled = true;
@@ -955,31 +1315,58 @@ class RepoNotesSettingTab extends PluginSettingTab {
         });
       };
       renderModelControl(null);
-      this.addApiKeySetting(containerEl, t.summaryApiKey, t.summaryApiKeyDesc, t.summaryApiKeyPlaceholder,
+      this.addApiKeySetting(
+        containerEl,
+        t.summaryApiKey,
+        t.summaryApiKeyDesc,
+        t.summaryApiKeyPlaceholder,
         () => this.plugin.settings.summaryApiKey,
-        async (v) => { this.plugin.settings.summaryApiKey = v; await this.plugin.saveSettings(); });
+        async (v) => {
+          this.plugin.settings.summaryApiKey = v;
+          await this.plugin.saveSettings();
+        }
+      );
     }
-    new Setting(containerEl).setName(t.summaryLang)
-      .addDropdown((d) => d.addOption("en", "English").addOption("ja", "日本語")
+    new Setting(containerEl).setName(t.summaryLang).addDropdown((d) =>
+      d
+        .addOption("en", "English")
+        .addOption("ja", "日本語")
         .setValue(this.plugin.settings.readmeSummaryLang)
-        .onChange(async (v) => { this.plugin.settings.readmeSummaryLang = v; await this.plugin.saveSettings(); }));
-    new Setting(containerEl).setName(t.autoSync)
-      .addToggle((tg) => tg.setValue(this.plugin.settings.autoSyncOnStartup).onChange(async (v) => {
-        this.plugin.settings.autoSyncOnStartup = v; await this.plugin.saveSettings(); this.display();
-      }));
+        .onChange(async (v) => {
+          this.plugin.settings.readmeSummaryLang = v;
+          await this.plugin.saveSettings();
+        })
+    );
+    new Setting(containerEl).setName(t.autoSync).addToggle((tg) =>
+      tg.setValue(this.plugin.settings.autoSyncOnStartup).onChange(async (v) => {
+        this.plugin.settings.autoSyncOnStartup = v;
+        await this.plugin.saveSettings();
+        this.display();
+      })
+    );
     if (this.plugin.settings.autoSyncOnStartup && this.plugin.settings.profiles.length > 1) {
-      new Setting(containerEl).setName(t.autoSyncProfile)
-        .addDropdown((d) => {
-          for (const p of this.plugin.settings.profiles) d.addOption(p.id, p.name);
-          d.setValue(this.plugin.settings.autoSyncProfileId || this.plugin.settings.profiles[0]?.id)
-            .onChange(async (v) => { this.plugin.settings.autoSyncProfileId = v; await this.plugin.saveSettings(); });
-        });
+      new Setting(containerEl).setName(t.autoSyncProfile).addDropdown((d) => {
+        for (const p of this.plugin.settings.profiles) d.addOption(p.id, p.name);
+        d.setValue(this.plugin.settings.autoSyncProfileId || this.plugin.settings.profiles[0]?.id).onChange(
+          async (v) => {
+            this.plugin.settings.autoSyncProfileId = v;
+            await this.plugin.saveSettings();
+          }
+        );
+      });
     }
 
     // ── Actions ───────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionActions).setHeading();
-    new Setting(containerEl).setName(t.syncNow).setDesc(t.syncNowDesc(profile.name))
-      .addButton((btn) => btn.setButtonText(t.modalSyncBtn).setCta().onClick(() => new SyncModal(this.app, this.plugin, profile.id).open()));
+    new Setting(containerEl)
+      .setName(t.syncNow)
+      .setDesc(t.syncNowDesc(profile.name))
+      .addButton((btn) =>
+        btn
+          .setButtonText(t.modalSyncBtn)
+          .setCta()
+          .onClick(() => new SyncModal(this.app, this.plugin, profile.id).open())
+      );
   }
 
   private addApiKeySetting(
@@ -992,15 +1379,22 @@ class RepoNotesSettingTab extends PluginSettingTab {
   ) {
     const t = this.plugin.t;
     let inputEl: HTMLInputElement;
-    new Setting(containerEl).setName(name).setDesc(desc)
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(desc)
       .addText((tx) => {
         inputEl = tx.inputEl;
         inputEl.type = "password";
-        tx.setPlaceholder(placeholder).setValue(getValue())
-          .onChange(async (v) => { await setValue(v.trim()); });
+        tx.setPlaceholder(placeholder)
+          .setValue(getValue())
+          .onChange(async (v) => {
+            await setValue(v.trim());
+          });
       })
       .addExtraButton((btn) => {
-        btn.setIcon("eye").setTooltip(t.showApiKey)
+        btn
+          .setIcon("eye")
+          .setTooltip(t.showApiKey)
           .onClick(() => {
             if (inputEl.type === "password") {
               inputEl.type = "text";
@@ -1027,7 +1421,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
     const PLACEHOLDER = t.folderParentPlaceholder;
     const folders: string[] = [PLACEHOLDER];
     this.app.vault.getAllFolders().forEach((f) => folders.push(f.path));
-    folders.sort((a, b) => a === PLACEHOLDER ? -1 : b === PLACEHOLDER ? 1 : a.localeCompare(b));
+    folders.sort((a, b) => (a === PLACEHOLDER ? -1 : b === PLACEHOLDER ? 1 : a.localeCompare(b)));
 
     const setting = new Setting(containerEl).setName(name).setDesc(desc);
     let previewEl: HTMLElement;
@@ -1051,7 +1445,8 @@ class RepoNotesSettingTab extends PluginSettingTab {
     let textInput: HTMLInputElement;
     setting.addText((tx) => {
       textInput = tx.inputEl;
-      tx.setPlaceholder(t.folderSubPlaceholder).setValue(textValue)
+      tx.setPlaceholder(t.folderSubPlaceholder)
+        .setValue(textValue)
         .onChange(async (value) => {
           updatePreview(folders.includes(dropValue) ? dropValue : "", value);
           await onChange(value, null);
@@ -1059,7 +1454,9 @@ class RepoNotesSettingTab extends PluginSettingTab {
       tx.inputEl.addClass("repo-notes-folder-input");
     });
 
-    previewEl = setting.controlEl.createEl("span", { attr: { style: "margin-left:8px; font-size:12px; color:var(--text-muted);" } });
+    previewEl = setting.controlEl.createEl("span", {
+      attr: { style: "margin-left:8px; font-size:12px; color:var(--text-muted);" },
+    });
     updatePreview(folders.includes(dropValue) ? dropValue : "", textValue);
   }
 }

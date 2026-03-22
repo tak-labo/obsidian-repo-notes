@@ -16,7 +16,7 @@ npm test             # Vitest でユニットテストを実行
 npm run test:watch   # ウォッチモードでテストを実行
 ```
 
-Docker で実行する場合は `docker compose run --rm build` / `docker compose run --rm test`。
+Docker で実行する場合は `docker compose run --rm build` / `docker compose run --rm test` / `docker compose run --rm lint` / `docker compose run --rm format-check`。
 
 テストファイルは `src/__tests__/`、Obsidian API のモックは `src/__mocks__/obsidian.ts`。
 
@@ -45,6 +45,10 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 - **HTTP通信は必ず `requestUrl`（Obsidian API）を使うこと。** ブラウザの `fetch` はObsidianのサンドボックスで動作しない。
 
+- **`window.moment` へのアクセス**は `(window as Window & { moment?: { locale?: () => string } })` で型付けすること。`as any` は禁止。
+
+- **CSSスタイルの直接指定禁止**: `element.style.*` は使わず、CSSクラス（`addClass/removeClass`）か `setCssProps({ "--var": val })` を使う。CSSクラス名は `repo-notes-` プレフィックス必須。
+
 - **i18n**: `src/i18n.ts` の `getT(lang: Lang): T` で翻訳オブジェクトを取得する。プラグインの `get t()` は `resolveUiLang(this.settings.uiLang, momentLocale)` を通じて言語を解決する。`uiLang` は `"auto" | "en" | "ja"` で、`"auto"` のときは `window.moment.locale()` でObsidianのロケールを動的検出する。
 
 - **設定マイグレーション**: `loadSettings()` に旧シングルアカウント形式から `profiles[]` 配列形式へのマイグレーションロジックがある。新しい設定フィールドを追加する際は同様にマイグレーションを考慮すること。新フィールドが `data.json` に存在しない場合のデフォルト補完も必要。
@@ -72,7 +76,23 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 ## Git ワークフロー
 
 - **mainブランチへの直接pushは禁止**（ブランチ保護ルールあり）。必ずブランチを作成してPRを出すこと。
+- **新ブランチは必ず `main` から作成すること**。古いブランチから切るとマージ済み変更がdiffに混入する。
 - コミット後は `git push origin <branch>` → `gh pr create` の流れで進める。
+- スカッシュマージ後のブランチ削除は `git branch -D`（`-d` では "not fully merged" エラーになる）。
+
+## Obsidian プラグイン審査（obsidianmd/obsidian-releases）
+
+- **ObsidianReviewBot** はmainブランチのソースコードをスキャンする（リリースタグ不要）。
+- ESLintルール（必須）:
+  - `any` 型禁止 → `window.moment` は `Window & { moment?: { locale?: () => string } }` で型付け
+  - `element.style.*` 直接指定禁止 → CSSクラス（`addClass/removeClass`）か `setCssProps({ "--var": val })` を使う
+  - `async` イベントハンドラ禁止 → `el.addEventListener("click", () => { void (async () => { ... })(); })`
+  - `createEl("h2/h3")` 禁止 → `new Setting(containerEl).setName(...).setHeading()` を使う
+  - コマンドIDにプラグインIDを含めない（`"sync"` ○ / `"repo-notes-sync"` ✗）
+  - `console.log` 禁止 → `console.debug/warn/error` を使う
+  - UIテキストはsentence case（固有名詞除く）
+  - `@ts-ignore` 禁止 → `@ts-expect-error -- <reason>` を使う
+- **コメントはすべて英語**（Obsidian コミュニティレビュアーが英語話者のため）
 
 ## Release
 

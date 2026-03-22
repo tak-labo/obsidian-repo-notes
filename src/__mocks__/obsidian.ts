@@ -4,17 +4,34 @@ export class Modal {
   constructor(public app: App) {}
 }
 export class PluginSettingTab {
-  constructor(public app: App, public plugin: Plugin) {}
+  constructor(
+    public app: App,
+    public plugin: Plugin
+  ) {}
 }
 export class Setting {
   constructor(public containerEl: HTMLElement) {}
-  setName(_name: string) { return this; }
-  setDesc(_desc: string) { return this; }
-  addText(_cb: unknown) { return this; }
-  addToggle(_cb: unknown) { return this; }
-  addButton(_cb: unknown) { return this; }
-  addDropdown(_cb: unknown) { return this; }
-  addTextArea(_cb: unknown) { return this; }
+  setName(_name: string) {
+    return this;
+  }
+  setDesc(_desc: string) {
+    return this;
+  }
+  addText(_cb: unknown) {
+    return this;
+  }
+  addToggle(_cb: unknown) {
+    return this;
+  }
+  addButton(_cb: unknown) {
+    return this;
+  }
+  addDropdown(_cb: unknown) {
+    return this;
+  }
+  addTextArea(_cb: unknown) {
+    return this;
+  }
 }
 export class TFile {}
 export class Notice {

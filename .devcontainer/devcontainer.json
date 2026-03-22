@@ -1,0 +1,17 @@
+{
+  "name": "obsidian-repo-notes",
+  "image": "node:20-alpine",
+  "workspaceFolder": "/workspaces/obsidian-repo-notes",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "npm ci",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}
