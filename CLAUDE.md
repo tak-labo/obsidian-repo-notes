@@ -75,9 +75,10 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 ## Git ワークフロー
 
-- **mainブランチへの直接pushは禁止**（ブランチ保護ルールあり）。必ずブランチを作成してPRを出すこと。
-- **新ブランチは必ず `main` から作成すること**。古いブランチから切るとマージ済み変更がdiffに混入する。
-- コミット後は `git push origin <branch>` → `gh pr create` の流れで進める。
+- **main・developブランチへの直接pushは禁止**（ブランチ保護ルールあり）。必ずブランチを作成してPRを出すこと。
+- **新ブランチは必ず `develop` から作成すること**。古いブランチから切るとマージ済み変更がdiffに混入する。
+- ブランチ運用: `feat/*` → `develop`（PR）→ `main`（PR / リリース時）
+- コミット後は `git push origin <branch>` → `gh pr create --base develop` の流れで進める。
 - スカッシュマージ後のブランチ削除は `git branch -D`（`-d` では "not fully merged" エラーになる）。
 
 ## Obsidian プラグイン審査（obsidianmd/obsidian-releases）
