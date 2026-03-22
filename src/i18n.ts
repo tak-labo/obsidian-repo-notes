@@ -128,6 +128,10 @@ const translations = {
     noticeAutoSync: (name: string) => `Repo Notes: Auto-syncing [${name}]...`,
     noticeNoToken: (name: string) => `⚠️ [${name}] Please set your GitHub token`,
     noticeError: (msg: string) => `Repo Notes error: ${msg}`,
+    syncThisNote: "Sync this repo note",
+    noticeSyncingNote: (name: string) => `Repo Notes: Syncing ${name}...`,
+    noticeSyncedNote: (name: string) => `Repo Notes: Synced ${name}`,
+    noticeNotARepoNote: "This note is not a repo note",
   },
 
   ja: {
@@ -257,6 +261,10 @@ const translations = {
     noticeAutoSync: (name: string) => `Repo Notes: [${name}] 自動同期を開始します...`,
     noticeNoToken: (name: string) => `⚠️ [${name}] GitHubトークンを設定してください`,
     noticeError: (msg: string) => `Repo Notes エラー: ${msg}`,
+    syncThisNote: "このリポジトリノートを同期",
+    noticeSyncingNote: (name: string) => `Repo Notes: ${name} を同期中...`,
+    noticeSyncedNote: (name: string) => `Repo Notes: ${name} を同期しました`,
+    noticeNotARepoNote: "このノートはリポジトリノートではありません",
   },
 } as const;
 
