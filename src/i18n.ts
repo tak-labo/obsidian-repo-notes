@@ -18,6 +18,10 @@ const translations = {
       "Force Sync will re-process all repos including unchanged ones. This may take a long time and incur AI summarization costs if enabled. Continue?",
     lastSynced: (date: string) => `last synced: ${date}`,
     modalNoToken: "⚠️ Please enter your GitHub token in settings",
+    rateLimit: (remaining: number, limit: number) => `API: ${remaining} / ${limit}`,
+    rateLimitWarn: (remaining: number, limit: number, resetTime: string) =>
+      `⚠️ API limit low: ${remaining} / ${limit} — resets at ${resetTime}`,
+    rateLimitError: "Could not check API rate limit",
     statTotal: "TOTAL",
     statSaved: "SAVED",
     statSkipped: "SKIPPED",
@@ -155,6 +159,10 @@ const translations = {
       "強制同期はすべてのリポジトリを再処理します（変更がないものも含む）。時間がかかる場合があります。AI要約が有効な場合はAPIコストが発生します。続行しますか？",
     lastSynced: (date: string) => `前回sync: ${date}`,
     modalNoToken: "⚠️ 設定からGitHubトークンを入力してください",
+    rateLimit: (remaining: number, limit: number) => `API残量: ${remaining} / ${limit}`,
+    rateLimitWarn: (remaining: number, limit: number, resetTime: string) =>
+      `⚠️ API残量が少ない: ${remaining} / ${limit} — ${resetTime}にリセット`,
+    rateLimitError: "APIレート制限を確認できませんでした",
     statTotal: "合計",
     statSaved: "保存",
     statSkipped: "スキップ",

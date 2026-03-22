@@ -120,3 +120,13 @@
 .repo-notes-model-btn {
   margin-left: 8px;
 }
+
+.repo-notes-rate-limit {
+  font-size: var(--font-smaller);
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.repo-notes-rate-limit-warn {
+  color: var(--color-orange);
+}
