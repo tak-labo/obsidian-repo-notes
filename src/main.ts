@@ -456,13 +456,17 @@ export default class RepoNotesPlugin extends Plugin {
       const existingContent = await this.app.vault.read(file);
       const existingMemo = extractMemo(existingContent);
       const readmeSummary = extractSummary(existingContent) || null;
-      const summaryMeta =
-        readmeSummary && fm?.summary_provider && fm?.summary_model
-          ? {
-              provider: fm.summary_provider as string,
-              model: fm.summary_model as string,
-            }
-          : null;
+      // Prefer frontmatter meta; fall back to current settings for notes created before meta was stored
+      const summaryMeta = readmeSummary
+        ? {
+            provider: (fm?.summary_provider as string | undefined) ?? this.settings.summaryProvider,
+            model:
+              (fm?.summary_model as string | undefined) ??
+              (this.settings.summaryProvider === "anthropic"
+                ? this.settings.anthropicModel
+                : this.settings.summaryModel),
+          }
+        : null;
 
       const content = buildNote(
         profile,
@@ -521,7 +525,7 @@ export default class RepoNotesPlugin extends Plugin {
       const repo: GitHubRepo = {
         full_name: fullName,
         html_url: (fm?.url as string) ?? `https://github.com/${fullName}`,
-        homepage: null,
+        homepage: (fm?.website as string | null) ?? null,
         description: (fm?.description as string | null) ?? null,
         language: (fm?.language as string | null) ?? null,
         stargazers_count: (fm?.stars as number) ?? 0,
