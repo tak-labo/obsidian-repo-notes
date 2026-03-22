@@ -96,15 +96,32 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 ## Release
 
+### 安定版リリース
+
 タグをプッシュすると `.github/workflows/release.yml` が起動し、自動でリリースと CHANGELOG.md 更新PRを作成する。
 
 ```bash
 # 1. manifest.json のバージョンを更新 → PR → mainにマージ
 # 2. タグをプッシュ（v プレフィックスなし）
-git tag 1.0.2
-git push origin 1.0.2
+git tag 1.2.0
+git push origin 1.2.0
 ```
 
 - タグ形式は **`v` プレフィックスなし**（`v1.0.0` ではワークフローが発火しない）
 - リリース成果物: `main.js`, `manifest.json`, `styles.css`, `repo-notes.zip`
 - リリース後に `chore/changelog-<version>` ブランチのPRが自動作成されるのでマージする
+
+### Pre-release（beta / BRAT 配布）
+
+`.github/workflows/pre-release.yml` が `-` を含むタグで起動し、`prerelease: true` の GitHub Release を作成する。BRAT ユーザーが beta 版を試せる。
+
+```bash
+# 1. manifest.json のバージョンを beta バージョンに更新（例: 1.2.0-beta）→ PR → mainにマージ
+# 2. タグをプッシュ
+git tag 1.2.0-beta
+git push origin 1.2.0-beta
+```
+
+- タグ形式: `1.2.0-beta`, `1.2.0-beta.1`, `1.2.0-rc.1` など（`-` を含む）
+- CHANGELOG は更新しない（安定版リリース時にまとめて更新される）
+- 安定版リリース前に manifest.json を `1.2.0` に戻して PR → マージ → タグの流れ

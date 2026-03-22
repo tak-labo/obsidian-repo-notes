@@ -1,6 +1,6 @@
 {
   "name": "obsidian-repo-notes",
-  "image": "node:20-alpine",
+  "image": "node:20",
   "workspaceFolder": "/workspaces/obsidian-repo-notes",
   "features": {
     "ghcr.io/devcontainers/features/git:1": {}
