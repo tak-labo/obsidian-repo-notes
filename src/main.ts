@@ -58,6 +58,11 @@ export interface Profile {
   includeReadmeRaw: boolean;
   includeReadmeExcerpt: boolean;
   overwriteExisting: boolean;
+  lastSyncedAt?: {
+    stars?: string;
+    mine?: string;
+    orgs?: { [orgLogin: string]: string };
+  };
 }
 
 interface RepoNotesSettings {
@@ -208,7 +213,8 @@ export default class RepoNotesPlugin extends Plugin {
     profile: Profile,
     onProgress: (msg: string) => void,
     onResult?: (saved: number, skipped: number, errors: number, total: number) => void,
-    shouldAbort?: () => boolean
+    shouldAbort?: () => boolean,
+    forceSync = false
   ) {
     let totalSaved = 0, totalSkipped = 0, totalErrors = 0, totalCount = 0;
     const acc = (s: number, sk: number, e: number, t: number) => {
@@ -217,19 +223,32 @@ export default class RepoNotesPlugin extends Plugin {
     if (profile.syncStars) {
       if (shouldAbort?.()) { onResult?.(totalSaved, totalSkipped, totalErrors, totalCount); return; }
       const parts = [profile.starsFolderParent, profile.starsFolder].filter(Boolean);
-      await this.syncRepoList(profile, "stars", parts.join("/") || "GitHub Stars", onProgress, acc, undefined, shouldAbort);
+      await this.syncRepoList(profile, "stars", parts.join("/") || "GitHub Stars", onProgress, acc, undefined, shouldAbort, forceSync);
     }
     if (profile.syncMyRepos) {
       if (shouldAbort?.()) { onResult?.(totalSaved, totalSkipped, totalErrors, totalCount); return; }
       const parts = [profile.myReposFolderParent, profile.myReposFolder].filter(Boolean);
-      await this.syncRepoList(profile, "mine", parts.join("/") || "My Repos", onProgress, acc, undefined, shouldAbort);
+      await this.syncRepoList(profile, "mine", parts.join("/") || "My Repos", onProgress, acc, undefined, shouldAbort, forceSync);
     }
     for (const org of (profile.orgNames ?? [])) {
       if (shouldAbort?.()) break;
       const orgLogin = org.trim();
       if (!orgLogin) continue;
       const parts = [profile.myReposFolderParent, orgLogin].filter(Boolean);
-      await this.syncRepoList(profile, "org", parts.join("/") || orgLogin, onProgress, acc, orgLogin, shouldAbort);
+      await this.syncRepoList(profile, "org", parts.join("/") || orgLogin, onProgress, acc, orgLogin, shouldAbort, forceSync);
+    }
+    if (!shouldAbort?.()) {
+      const syncedAt = new Date().toISOString();
+      if (!profile.lastSyncedAt) profile.lastSyncedAt = {};
+      if (profile.syncStars) profile.lastSyncedAt.stars = syncedAt;
+      if (profile.syncMyRepos) profile.lastSyncedAt.mine = syncedAt;
+      for (const org of (profile.orgNames ?? [])) {
+        const orgLogin = org.trim();
+        if (!orgLogin) continue;
+        if (!profile.lastSyncedAt.orgs) profile.lastSyncedAt.orgs = {};
+        profile.lastSyncedAt.orgs[orgLogin] = syncedAt;
+      }
+      await this.saveSettings();
     }
     onResult?.(totalSaved, totalSkipped, totalErrors, totalCount);
   }
@@ -241,7 +260,8 @@ export default class RepoNotesPlugin extends Plugin {
     onProgress: (msg: string) => void,
     onResult?: (saved: number, skipped: number, errors: number, total: number) => void,
     orgLogin?: string,
-    shouldAbort?: () => boolean
+    shouldAbort?: () => boolean,
+    forceSync = false
   ) {
     const t = this.t;
     if (!profile.githubToken) {
@@ -264,17 +284,27 @@ export default class RepoNotesPlugin extends Plugin {
       onProgress(t.progressFetched(profile.name, label, total));
       await this.ensureFolder(folder);
 
+      const lastSyncedAtStr = mode === "stars" ? profile.lastSyncedAt?.stars
+        : mode === "mine" ? profile.lastSyncedAt?.mine
+        : profile.lastSyncedAt?.orgs?.[orgLogin ?? ""];
+      const lastSyncedAt = (!forceSync && lastSyncedAtStr) ? new Date(lastSyncedAtStr) : null;
+
       const commitCounts = new Map<string, number>();
       if (profile.includeCommitCount) {
         onProgress(t.progressCommits(profile.name));
         const repos = items.map((i) => (i.repo ?? i) as unknown as GitHubRepo);
-        for (let b = 0; b < repos.length; b += 10) {
-          await Promise.all(repos.slice(b, b + 10).map(async (repo) => {
+        const reposToFetch = repos.filter((repo) => {
+          if (!lastSyncedAt) return true;
+          const repoUpdatedAt = repo.pushed_at ?? repo.updated_at;
+          return !repoUpdatedAt || new Date(repoUpdatedAt) > lastSyncedAt;
+        });
+        for (let b = 0; b < reposToFetch.length; b += 10) {
+          await Promise.all(reposToFetch.slice(b, b + 10).map(async (repo) => {
             try {
               commitCounts.set(repo.full_name, await this.fetchCommitCount(profile.githubToken, repo.full_name, repo.default_branch ?? "main"));
             } catch { commitCounts.set(repo.full_name, -1); }
           }));
-          onProgress(t.progressCommitsN(profile.name, Math.min(b + 10, repos.length), repos.length));
+          onProgress(t.progressCommitsN(profile.name, Math.min(b + 10, reposToFetch.length), reposToFetch.length));
         }
       }
 
@@ -291,17 +321,37 @@ export default class RepoNotesPlugin extends Plugin {
           const exists = this.app.vault.getAbstractFileByPath(fpath) instanceof TFile;
           if (exists && !profile.overwriteExisting) { skipped++; continue; }
 
+          const repoUpdatedAt = repo.pushed_at ?? repo.updated_at;
+          const isUpdated = forceSync || !exists || !lastSyncedAt || !repoUpdatedAt
+            || new Date(repoUpdatedAt) > lastSyncedAt;
+
           let readmeRaw: string | null = null;
           let readmeSummary: string | null = null;
-          if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
+          if (isUpdated && (profile.includeReadmeRaw || profile.includeReadmeExcerpt)) {
             readmeRaw = await this.fetchReadme(profile.githubToken, repo.full_name);
           }
           const canSummarize = checkCanSummarize(this.settings);
-          if (profile.includeReadmeExcerpt && canSummarize && readmeRaw) {
+          if (isUpdated && profile.includeReadmeExcerpt && canSummarize && readmeRaw) {
             readmeSummary = await this.summarizeReadme(readmeRaw, repo.full_name);
           }
 
-          const content = this.buildNote(profile, item, commitCounts.get(repo.full_name) ?? -1, readmeSummary, readmeRaw, mode);
+          const summaryMeta = readmeSummary ? {
+            provider: this.settings.summaryProvider,
+            model: this.settings.summaryProvider === "anthropic"
+              ? this.settings.anthropicModel
+              : this.settings.summaryModel,
+          } : null;
+
+          let existingMemo = "";
+          if (exists) {
+            const existingFile = this.app.vault.getAbstractFileByPath(fpath);
+            if (existingFile instanceof TFile) {
+              const existingContent = await this.app.vault.read(existingFile);
+              existingMemo = extractMemo(existingContent);
+            }
+          }
+
+          const content = buildNote(profile, item, commitCounts.get(repo.full_name) ?? -1, readmeSummary, readmeRaw, mode, summaryMeta, existingMemo);
           if (exists) {
             const existingFile = this.app.vault.getAbstractFileByPath(fpath);
             if (existingFile instanceof TFile) {
@@ -548,7 +598,24 @@ export function checkCanSummarize(settings: Pick<RepoNotesSettings, "summaryProv
     : !!settings.anthropicApiKey;
 }
 
-export function buildNote(profile: Profile, item: StarredItem, commitCount = -1, readmeSummary: string | null = null, readmeRaw: string | null = null, mode: "stars" | "mine" | "org" = "stars"): string {
+export function extractMemo(content: string): string {
+  const memoStart = content.indexOf("## Memo\n");
+  if (memoStart === -1) return "";
+  const afterMemo = content.slice(memoStart + "## Memo\n".length);
+  const nextHeading = afterMemo.search(/^## /m);
+  return nextHeading === -1 ? afterMemo : afterMemo.slice(0, nextHeading);
+}
+
+export function buildNote(
+  profile: Profile,
+  item: StarredItem,
+  commitCount = -1,
+  readmeSummary: string | null = null,
+  readmeRaw: string | null = null,
+  mode: "stars" | "mine" | "org" = "stars",
+  summaryMeta: { provider: string; model: string } | null = null,
+  existingMemo = ""
+): string {
   const repo = (item.repo ?? item) as GitHubRepo;
   const starredAt = item.starred_at ?? null;
   const now = new Date().toISOString().split("T")[0];
@@ -572,12 +639,18 @@ export function buildNote(profile: Profile, item: StarredItem, commitCount = -1,
   if (profile.includeLastUpdated && lastUpdated) fm.push(`last_updated: ${lastUpdated}`);
   if (profile.includeStarredDate && starredAt) fm.push(`starred_at: ${starredAt.split("T")[0]}`);
   fm.push(`synced_at: ${now}`);
+  if (summaryMeta) {
+    fm.push(`summary_provider: ${summaryMeta.provider}`);
+    fm.push(`summary_model: ${summaryMeta.model}`);
+  }
   if (profile.includeTopics && repo.topics?.length)
     fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
   fm.push("---\n");
 
   const lines: string[] = [];
   if (mode === "mine") lines.push(`> 🔒 ${repo.private ? "Private" : "Public"}\n`);
+  lines.push("## Memo");
+  lines.push(existingMemo || "\n");
   if (profile.includeReadmeExcerpt && readmeSummary) { lines.push("## Summary"); lines.push(readmeSummary + "\n"); }
   if (profile.includeReadmeRaw && readmeRaw) { lines.push("## README"); lines.push(readmeRaw + "\n"); }
 
@@ -627,7 +700,6 @@ class SyncModal extends Modal {
 
     const progressWrap = contentEl.createDiv("gs-progress-wrap");
     this.progressEl = progressWrap.createDiv("gs-status-text");
-    this.progressEl.setText(t.modalReady);
     this.progressBar = progressWrap.createDiv("gs-track").createDiv("gs-fill");
 
     this.statsEl = contentEl.createDiv("gs-stats");
@@ -636,10 +708,11 @@ class SyncModal extends Modal {
 
     const btnRow = contentEl.createDiv("gs-btn-row");
     const syncBtn = btnRow.createEl("button", { text: t.modalSyncBtn, cls: "mod-cta" });
+    const forceBtn = btnRow.createEl("button", { text: t.modalForceSyncBtn });
     const abortBtn = btnRow.createEl("button", { text: t.modalAbort });
     abortBtn.addClass("repo-notes-hidden");
 
-    syncBtn.addEventListener("click", () => {
+    const runSync = (forceSync: boolean) => {
       void (async () => {
         if (this.running) return;
         const profile = this.plugin.settings.profiles.find((p) => p.id === selectedProfileId);
@@ -648,6 +721,7 @@ class SyncModal extends Modal {
         this.running = true;
         this.aborted = false;
         syncBtn.addClass("repo-notes-hidden");
+        forceBtn.addClass("repo-notes-hidden");
         abortBtn.removeClass("repo-notes-hidden");
         abortBtn.disabled = false;
         abortBtn.setText(t.modalAbort);
@@ -667,15 +741,25 @@ class SyncModal extends Modal {
             this.progressBar.setCssProps({ "--gs-fill-width": "100%" });
             this.showStats(saved, skipped, errors, total);
           },
-          () => this.aborted
+          () => this.aborted,
+          forceSync
         );
 
         this.running = false;
         abortBtn.addClass("repo-notes-hidden");
         syncBtn.removeClass("repo-notes-hidden");
+        forceBtn.removeClass("repo-notes-hidden");
         syncBtn.setText(t.modalResync);
         if (this.aborted) this.progressEl.setText(t.modalAborted);
       })();
+    };
+
+    syncBtn.addEventListener("click", () => runSync(false));
+
+    forceBtn.addEventListener("click", () => {
+      const ok = window.confirm(t.modalForceSyncConfirm);
+      if (!ok) return;
+      runSync(true);
     });
 
     abortBtn.addEventListener("click", () => {
@@ -688,8 +772,19 @@ class SyncModal extends Modal {
     closeBtn.addEventListener("click", () => this.close());
 
     const profile = profiles.find((p) => p.id === selectedProfileId);
-    if (profile?.githubToken) syncBtn.click();
-    else this.progressEl.setText(t.modalNoToken);
+    if (profile?.githubToken) {
+      const lastSynced = profile.lastSyncedAt;
+      const dates: string[] = [];
+      if (lastSynced?.stars) dates.push(`Stars: ${lastSynced.stars.split("T")[0]}`);
+      if (lastSynced?.mine) dates.push(`Mine: ${lastSynced.mine.split("T")[0]}`);
+      const label = dates.length > 0
+        ? `${t.modalReady} (${t.lastSynced(dates.join(", "))})`
+        : t.modalReady;
+      this.progressEl.setText(label);
+      syncBtn.click();
+    } else {
+      this.progressEl.setText(t.modalNoToken);
+    }
   }
 
   appendLog(msg: string) {
@@ -864,8 +959,10 @@ class RepoNotesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName(t.sectionShared).setHeading();
     new Setting(containerEl).setName(t.summaryProvider).setDesc(t.summaryProviderDesc)
       .addDropdown((d) =>
+        /* eslint-disable obsidianmd/ui/sentence-case -- proper nouns: Anthropic, OpenAI, Ollama, LM Studio, vLLM */
         d.addOption("anthropic", "Anthropic (Claude)")
          .addOption("openai-compatible", "OpenAI-compatible (Ollama, LM Studio, vLLM...)")
+        /* eslint-enable obsidianmd/ui/sentence-case */
          .setValue(this.plugin.settings.summaryProvider)
          .onChange(async (v) => {
            this.plugin.settings.summaryProvider = v as "anthropic" | "openai-compatible";
@@ -887,6 +984,7 @@ class RepoNotesSettingTab extends PluginSettingTab {
             .onChange(async (v) => { this.plugin.settings.anthropicModel = v; await this.plugin.saveSettings(); });
         } else {
           new TextComponent(anthropicModelSetting.controlEl)
+            // eslint-disable-next-line obsidianmd/ui/sentence-case -- model identifier, not UI text
             .setPlaceholder("claude-haiku-4-5-20251001")
             .setValue(this.plugin.settings.anthropicModel)
             .onChange(async (v) => { this.plugin.settings.anthropicModel = v.trim(); await this.plugin.saveSettings(); });
@@ -912,8 +1010,10 @@ class RepoNotesSettingTab extends PluginSettingTab {
       new Setting(containerEl).setName(t.summaryPreset).setDesc(t.summaryPresetDesc)
         .addDropdown((d) => {
           d.addOption("", "Custom")
+           /* eslint-disable obsidianmd/ui/sentence-case -- proper nouns: Ollama, LM Studio */
            .addOption("ollama", "Ollama (localhost:11434)")
            .addOption("lmstudio", "LM Studio (localhost:1234)")
+           /* eslint-enable obsidianmd/ui/sentence-case */
            .setValue("")
            .onChange(async (v) => {
              if (v === "ollama") this.plugin.settings.summaryBaseUrl = "http://localhost:11434/v1";

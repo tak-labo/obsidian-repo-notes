@@ -1,14 +1,21 @@
 services:
   build:
-    image: node:18-alpine
+    image: node:20-alpine
     working_dir: /app
     volumes:
       - .:/app
     command: sh -c "npm ci && npm run build"
 
   test:
-    image: node:18-alpine
+    image: node:20-alpine
     working_dir: /app
     volumes:
       - .:/app
     command: sh -c "npm ci && npm test"
+
+  lint:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm ci && npm run lint"
