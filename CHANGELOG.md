@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.1.1 (2026-03-22)
+
+## What's Changed
+* chore: CHANGELOG.mdを1.1.0に更新 by @github-actions[bot] in https://github.com/tak-labo/obsidian-repo-notes/pull/20
+* ノート単体Sync機能を追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/22
+* BRAT向けpre-releaseワークフローを追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/24
+* バージョンを1.2.0-beta.1に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/25
+* バージョンを1.1.1-beta.1に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/26
+* ノート単体AI要約機能を追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/27
+* バージョンを1.1.1-beta.2に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/28
+* SyncModalにAPIレート制限表示を追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/29
+* バージョンを1.1.1-beta.3に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/30
+* コマンドパレットからAPIレート制限確認を追加 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/31
+* バージョンを1.1.1-beta.4に更新 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/32
+* Translate CLAUDE.md to English, add Japanese reference files by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/33
+* Add per-property hide/show toggle in settings by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/34
+* Bump version to 1.1.1-beta.5 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/35
+* Add BACKLOG.md with future feature candidates by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/36
+* Separate sync and AI summarize responsibilities by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/37
+* Bump version to 1.1.1-beta.6 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/38
+* Bump version to 1.1.1-rc.1 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/39
+* Fix homepage data loss and summaryMeta fallback in summarizeCurrentNote by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/40
+* Update CLAUDE.md docs: sync/AI separation, extractSummary, doc update rule by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/41
+* Translate all test descriptions to English by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/42
+* Clarify comment language rules in CLAUDE.md by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/43
+* Bump version to 1.1.1-rc.2 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/44
+* Update README for 1.1.1 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/45
+* Bump version to 1.1.1 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/46
+
+
+**Full Changelog**: https://github.com/tak-labo/obsidian-repo-notes/compare/1.1.0...1.1.1
+
+---
+
+
 ## 1.1.0 (2026-03-22)
 
 ## What's Changed
