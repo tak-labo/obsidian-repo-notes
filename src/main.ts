@@ -174,7 +174,7 @@ export default class RepoNotesPlugin extends Plugin {
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;
         const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-        if (!fm?.repo || !fm?.source) return;
+        if (!fm?.repo || !fm?.source || !fm?.profile) return;
         menu.addItem((menuItem) =>
           menuItem
             .setTitle(this.t.syncThisNote)
