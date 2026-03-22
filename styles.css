@@ -130,3 +130,9 @@
 .repo-notes-rate-limit-warn {
   color: var(--color-orange);
 }
+
+.repo-notes-btn-dimmed {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}

@@ -200,6 +200,7 @@ describe("defaultProfile", () => {
     expect(p.includeStats).toBe(true);
     expect(p.overwriteExisting).toBe(true);
     expect(p.orgNames).toEqual([]);
+    expect(p.hiddenProps).toEqual([]);
   });
 });
 
@@ -354,6 +355,56 @@ describe("buildNote", () => {
     const memoIdx = note.indexOf("## Memo");
     const summaryIdx = note.indexOf("## Summary");
     expect(memoIdx).toBeLessThan(summaryIdx);
+  });
+});
+
+// ─── buildNote hiddenProps ────────────────────────────────────────────────────
+
+describe("buildNote hiddenProps", () => {
+  const base = defaultProfile("test-id", "Personal");
+
+  it("hides description when in hiddenProps", () => {
+    const p = { ...base, includeDescription: true, hiddenProps: ["description"] };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).not.toContain("description:");
+  });
+
+  it("shows description when hiddenProps is empty", () => {
+    const p = { ...base, includeDescription: true, hiddenProps: [] };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).toContain("description:");
+  });
+
+  it("hides stats when in hiddenProps", () => {
+    const p = { ...base, includeStats: true, hiddenProps: ["stats"] };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).not.toContain("language:");
+    expect(note).not.toContain("stars:");
+    expect(note).not.toContain("forks:");
+  });
+
+  it("hides commits when in hiddenProps", () => {
+    const p = { ...base, includeCommitCount: true, hiddenProps: ["commits"] };
+    const note = buildNote(p, mockStarredItem, 42);
+    expect(note).not.toContain("commits:");
+  });
+
+  it("hides tags when in hiddenProps", () => {
+    const p = { ...base, includeTopics: true, hiddenProps: ["tags"] };
+    const note = buildNote(p, mockStarredItem);
+    expect(note).not.toContain("tags:");
+  });
+
+  it("hides summary section when in hiddenProps", () => {
+    const p = { ...base, includeReadmeExcerpt: true, hiddenProps: ["summary"] };
+    const note = buildNote(p, mockStarredItem, -1, "ai summary text");
+    expect(note).not.toContain("## Summary");
+  });
+
+  it("shows summary section when hiddenProps is empty", () => {
+    const p = { ...base, includeReadmeExcerpt: true, hiddenProps: [] };
+    const note = buildNote(p, mockStarredItem, -1, "ai summary text");
+    expect(note).toContain("## Summary");
   });
 });
 
