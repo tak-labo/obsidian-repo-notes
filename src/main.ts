@@ -58,6 +58,7 @@ export interface Profile {
   includeReadmeRaw: boolean;
   includeReadmeExcerpt: boolean;
   overwriteExisting: boolean;
+  hiddenProps: string[];
   lastSyncedAt?: {
     stars?: string;
     mine?: string;
@@ -110,6 +111,7 @@ export function defaultProfile(id: string, name: string): Profile {
     includeReadmeRaw: false,
     includeReadmeExcerpt: false,
     overwriteExisting: true,
+    hiddenProps: [],
   };
 }
 
@@ -300,6 +302,10 @@ export default class RepoNotesPlugin extends Plugin {
     // Migrate: if uiLang was not explicitly saved (old default "en"), reset to "auto"
     if (!saved || !saved.uiLang) {
       this.settings.uiLang = "auto";
+    }
+    // Migrate: back-fill hiddenProps for existing profiles
+    for (const p of this.settings.profiles) {
+      if (p.hiddenProps === undefined) p.hiddenProps = [];
     }
   }
 
@@ -1020,39 +1026,41 @@ export function buildNote(
   const fmtDate = (iso: string | null | undefined) => (iso ? iso.split("T")[0] : null);
   const lastUpdated = fmtDate(repo.pushed_at ?? repo.updated_at);
 
+  const hidden = (key: string) => profile.hiddenProps.indexOf(key) !== -1;
+
   const fm: string[] = ["---"];
   fm.push(`source: ${mode === "mine" ? "my-repo" : mode === "org" ? "org-repo" : "starred"}`);
   fm.push(`profile: "${profile.name}"`);
   fm.push(`repo: "${repo.full_name}"`);
   fm.push(`url: "${repo.html_url}"`);
   if (repo.homepage) fm.push(`website: "${repo.homepage}"`);
-  if (profile.includeDescription && repo.description)
+  if (profile.includeDescription && repo.description && !hidden("description"))
     fm.push(`description: "${repo.description.replace(/"/g, '\\"')}"`);
-  if (profile.includeStats) {
+  if (profile.includeStats && !hidden("stats")) {
     fm.push(`language: ${repo.language ?? "Unknown"}`);
     fm.push(`stars: ${repo.stargazers_count ?? 0}`);
     fm.push(`forks: ${repo.forks_count ?? 0}`);
   }
-  if (profile.includeCommitCount && commitCount >= 0) fm.push(`commits: ${commitCount}`);
-  if (profile.includeLastUpdated && lastUpdated) fm.push(`last_updated: ${lastUpdated}`);
-  if (profile.includeStarredDate && starredAt) fm.push(`starred_at: ${starredAt.split("T")[0]}`);
+  if (profile.includeCommitCount && commitCount >= 0 && !hidden("commits")) fm.push(`commits: ${commitCount}`);
+  if (profile.includeLastUpdated && lastUpdated && !hidden("last_updated")) fm.push(`last_updated: ${lastUpdated}`);
+  if (profile.includeStarredDate && starredAt && !hidden("starred_at")) fm.push(`starred_at: ${starredAt.split("T")[0]}`);
   fm.push(`synced_at: ${now}`);
   if (summaryMeta) {
     fm.push(`summary_provider: ${summaryMeta.provider}`);
     fm.push(`summary_model: ${summaryMeta.model}`);
   }
-  if (profile.includeTopics && repo.topics?.length) fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
+  if (profile.includeTopics && repo.topics?.length && !hidden("tags")) fm.push(`tags: [${repo.topics.map((t) => `"${t}"`).join(", ")}]`);
   fm.push("---\n");
 
   const lines: string[] = [];
   if (mode === "mine") lines.push(`> 🔒 ${repo.private ? "Private" : "Public"}\n`);
   lines.push("## Memo");
   lines.push(existingMemo || "\n");
-  if (profile.includeReadmeExcerpt && readmeSummary) {
+  if (profile.includeReadmeExcerpt && readmeSummary && !hidden("summary")) {
     lines.push("## Summary");
     lines.push(readmeSummary + "\n");
   }
-  if (profile.includeReadmeRaw && readmeRaw) {
+  if (profile.includeReadmeRaw && readmeRaw && !hidden("readme")) {
     lines.push("## README");
     lines.push(readmeRaw + "\n");
   }
@@ -1440,25 +1448,45 @@ class RepoNotesSettingTab extends PluginSettingTab {
 
     // ── Note content ──────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionNoteContent).setHeading();
-    const toggles: Array<[keyof Profile, string, string]> = [
-      ["includeDescription", t.includeDescription, t.includeDescriptionDesc],
-      ["includeTopics", t.includeTopics, t.includeTopicsDesc],
-      ["includeStats", t.includeStats, t.includeStatsDesc],
-      ["includeCommitCount", t.includeCommitCount, t.includeCommitCountDesc],
-      ["includeLastUpdated", t.includeLastUpdated, t.includeLastUpdatedDesc],
-      ["includeStarredDate", t.includeStarredDate, t.includeStarredDateDesc],
-      ["overwriteExisting", t.overwriteExisting, t.overwriteExistingDesc],
+    const toggles: Array<[keyof Profile, string, string, string | null]> = [
+      ["includeDescription", t.includeDescription, t.includeDescriptionDesc, "description"],
+      ["includeTopics", t.includeTopics, t.includeTopicsDesc, "tags"],
+      ["includeStats", t.includeStats, t.includeStatsDesc, "stats"],
+      ["includeCommitCount", t.includeCommitCount, t.includeCommitCountDesc, "commits"],
+      ["includeLastUpdated", t.includeLastUpdated, t.includeLastUpdatedDesc, "last_updated"],
+      ["includeStarredDate", t.includeStarredDate, t.includeStarredDateDesc, "starred_at"],
+      ["overwriteExisting", t.overwriteExisting, t.overwriteExistingDesc, null],
     ];
-    for (const [key, name, desc] of toggles) {
-      new Setting(containerEl)
+    for (const [key, name, desc, propKey] of toggles) {
+      const setting = new Setting(containerEl)
         .setName(name)
         .setDesc(desc)
         .addToggle((tg) =>
           tg.setValue(profile[key] as boolean).onChange(async (v) => {
             (profile[key] as boolean) = v;
             await this.plugin.saveSettings();
+            this.display();
           })
         );
+      if (propKey !== null) {
+        const isEnabled = profile[key] as boolean;
+        const isHidden = profile.hiddenProps.indexOf(propKey) !== -1;
+        setting.addExtraButton((btn) => {
+          btn
+            .setIcon(isHidden ? "eye-off" : "eye")
+            .setTooltip(isHidden ? "Show in frontmatter" : "Hide from frontmatter")
+            .onClick(async () => {
+              if (isHidden) {
+                profile.hiddenProps = profile.hiddenProps.filter((p) => p !== propKey);
+              } else {
+                profile.hiddenProps = [...profile.hiddenProps, propKey];
+              }
+              await this.plugin.saveSettings();
+              this.display();
+            });
+          if (!isEnabled) btn.extraSettingsEl.addClass("repo-notes-btn-dimmed");
+        });
+      }
     }
 
     // ── README ────────────────────────────────────────────────────────────
@@ -1470,8 +1498,25 @@ class RepoNotesSettingTab extends PluginSettingTab {
         tg.setValue(profile.includeReadmeRaw).onChange(async (v) => {
           profile.includeReadmeRaw = v;
           await this.plugin.saveSettings();
+          this.display();
         })
-      );
+      )
+      .addExtraButton((btn) => {
+        const isHidden = profile.hiddenProps.indexOf("readme") !== -1;
+        btn
+          .setIcon(isHidden ? "eye-off" : "eye")
+          .setTooltip(isHidden ? "Show in note body" : "Hide from note body")
+          .onClick(async () => {
+            if (isHidden) {
+              profile.hiddenProps = profile.hiddenProps.filter((p) => p !== "readme");
+            } else {
+              profile.hiddenProps = [...profile.hiddenProps, "readme"];
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          });
+        if (!profile.includeReadmeRaw) btn.extraSettingsEl.addClass("repo-notes-btn-dimmed");
+      });
     new Setting(containerEl)
       .setName(t.includeReadmeSummary)
       .setDesc(t.includeReadmeSummaryDesc)
@@ -1479,8 +1524,25 @@ class RepoNotesSettingTab extends PluginSettingTab {
         tg.setValue(profile.includeReadmeExcerpt).onChange(async (v) => {
           profile.includeReadmeExcerpt = v;
           await this.plugin.saveSettings();
+          this.display();
         })
-      );
+      )
+      .addExtraButton((btn) => {
+        const isHidden = profile.hiddenProps.indexOf("summary") !== -1;
+        btn
+          .setIcon(isHidden ? "eye-off" : "eye")
+          .setTooltip(isHidden ? "Show in note body" : "Hide from note body")
+          .onClick(async () => {
+            if (isHidden) {
+              profile.hiddenProps = profile.hiddenProps.filter((p) => p !== "summary");
+            } else {
+              profile.hiddenProps = [...profile.hiddenProps, "summary"];
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          });
+        if (!profile.includeReadmeExcerpt) btn.extraSettingsEl.addClass("repo-notes-btn-dimmed");
+      });
 
     // ── Shared ────────────────────────────────────────────────────────────
     new Setting(containerEl).setName(t.sectionShared).setHeading();
