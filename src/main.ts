@@ -164,7 +164,7 @@ export default class RepoNotesPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (!file) return false;
         const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-        if (!fm?.repo || !fm?.source) return false;
+        if (!fm?.repo || !fm?.source || !fm?.profile) return false;
         if (!checking) void this.syncCurrentNote(file);
         return true;
       },
