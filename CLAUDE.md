@@ -8,120 +8,120 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+**Never use local npm commands. Always run via Docker.**
+
 ```bash
-npm install          # 依存関係インストール
-npm run dev          # 開発用ウォッチモード（変更を自動ビルド）
-npm run build        # 型チェック(tsc -noEmit -skipLibCheck) + 本番ビルド
-npm test             # Vitest でユニットテストを実行
-npm run test:watch   # ウォッチモードでテストを実行
+docker compose run --rm build         # Type check + production build
+docker compose run --rm test          # Run Vitest unit tests
+docker compose run --rm lint          # ESLint check
+docker compose run --rm format-check  # Prettier format check
 ```
 
-Docker で実行する場合は `docker compose run --rm build` / `docker compose run --rm test` / `docker compose run --rm lint` / `docker compose run --rm format-check`。
+Test files are in `src/__tests__/`, Obsidian API mock is at `src/__mocks__/obsidian.ts`.
 
-テストファイルは `src/__tests__/`、Obsidian API のモックは `src/__mocks__/obsidian.ts`。
-
-### Vault へのシンボリックリンク（ライブ開発）
+### Symlink to Vault (live development)
 
 ```bash
 ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 ```
 
-ビルド成果物は `main.js`（`.gitignore` で除外済み）。esbuild が `src/main.ts` をエントリポイントとしてバンドルする。
+Build output is `main.js` (excluded by `.gitignore`). esbuild bundles `src/main.ts` as the entry point.
 
 ## Architecture
 
-ソースファイルは2つ：
+Two source files:
 
-- **`src/i18n.ts`** — 日英翻訳オブジェクト。`getT(lang: Lang): T` をエクスポート。翻訳値には文字列だけでなく `(name: string) => string` のような関数型も含まれる。
-- **`src/main.ts`** — プラグイン本体。以下のセクションで構成：
-  - **Types** — `GitHubRepo`, `StarredItem`, `Profile`, `RepoNotesSettings` インターフェース
+- **`src/i18n.ts`** — English/Japanese translation object. Exports `getT(lang: Lang): T`. Translation values include both strings and function types like `(name: string) => string`.
+- **`src/main.ts`** — Plugin body, organized into sections:
+  - **Types** — `GitHubRepo`, `StarredItem`, `Profile`, `RepoNotesSettings` interfaces
   - **Defaults** — `defaultProfile()`, `DEFAULT_SETTINGS`
-  - **Main Plugin** (`RepoNotesPlugin extends Plugin`) — `onload`, `loadSettings`, `saveSettings`, `syncProfile`, `syncRepoList` などコアロジック
-  - **Settings Tab** (`RepoNotesSettingTab extends PluginSettingTab`) — プロファイル管理UI
-  - **Modals** (`SyncModal` など) — 同期進捗表示UI
-  - **Pure utility functions** — テスト用にエクスポートされた純粋関数（後述）
+  - **Main Plugin** (`RepoNotesPlugin extends Plugin`) — `onload`, `loadSettings`, `saveSettings`, `syncProfile`, `syncRepoList`, and other core logic
+  - **Settings Tab** (`RepoNotesSettingTab extends PluginSettingTab`) — Profile management UI
+  - **Modals** (`SyncModal` etc.) — Sync progress UI
+  - **Pure utility functions** — Exported pure functions for testing (see below)
 
 ## Key implementation notes
 
-- **HTTP通信は必ず `requestUrl`（Obsidian API）を使うこと。** ブラウザの `fetch` はObsidianのサンドボックスで動作しない。
+- **Always use `requestUrl` (Obsidian API) for HTTP requests.** Browser `fetch` does not work in Obsidian's sandbox.
 
-- **`window.moment` へのアクセス**は `(window as Window & { moment?: { locale?: () => string } })` で型付けすること。`as any` は禁止。
+- **Accessing `window.moment`**: type as `(window as Window & { moment?: { locale?: () => string } })`. `as any` is forbidden.
 
-- **CSSスタイルの直接指定禁止**: `element.style.*` は使わず、CSSクラス（`addClass/removeClass`）か `setCssProps({ "--var": val })` を使う。CSSクラス名は `repo-notes-` プレフィックス必須。
+- **Never set CSS styles directly**: avoid `element.style.*`. Use CSS classes (`addClass/removeClass`) or `setCssProps({ "--var": val })`. All CSS class names must use the `repo-notes-` prefix.
 
-- **i18n**: `src/i18n.ts` の `getT(lang: Lang): T` で翻訳オブジェクトを取得する。プラグインの `get t()` は `resolveUiLang(this.settings.uiLang, momentLocale)` を通じて言語を解決する。`uiLang` は `"auto" | "en" | "ja"` で、`"auto"` のときは `window.moment.locale()` でObsidianのロケールを動的検出する。
+- **i18n**: Use `getT(lang: Lang): T` from `src/i18n.ts`. The plugin's `get t()` resolves the language via `resolveUiLang(this.settings.uiLang, momentLocale)`. `uiLang` is `"auto" | "en" | "ja"`. When `"auto"`, Obsidian's locale is detected dynamically via `window.moment.locale()`.
 
-- **設定マイグレーション**: `loadSettings()` に旧シングルアカウント形式から `profiles[]` 配列形式へのマイグレーションロジックがある。新しい設定フィールドを追加する際は同様にマイグレーションを考慮すること。新フィールドが `data.json` に存在しない場合のデフォルト補完も必要。
+- **Settings migration**: `loadSettings()` contains migration logic from the old single-account format to the `profiles[]` array format. When adding new settings fields, handle migration similarly. Also ensure missing fields are filled with defaults.
 
-- **AIプロバイダー**: `summaryProvider: "anthropic" | "openai-compatible"` で切り替える。`summarizeReadme()` がディスパッチャーとなり、`summarizeReadmeAnthropic()` または `summarizeReadmeOpenAI()` を呼ぶ。OpenAI互換は `/v1/chat/completions` エンドポイントを使用。`checkCanSummarize()` で要約可能かを判定。
+- **AI providers**: Switch via `summaryProvider: "anthropic" | "openai-compatible"`. `summarizeReadme()` dispatches to `summarizeReadmeAnthropic()` or `summarizeReadmeOpenAI()`. OpenAI-compatible uses the `/v1/chat/completions` endpoint. Use `checkCanSummarize()` to determine if summarization is available.
 
-- **コミット数取得**はバッチ処理（10件並列）で行われる（GitHub API レート制限対策）。
+- **Commit count fetching** is batched (10 parallel) to respect GitHub API rate limits.
 
-- **TypeScript制約**: `tsconfig.json` の `lib` が `["ES6", "DOM"]`、`target` が `ES6` で固定されている。TypeScript 5系（`^5.3.0`）を使用しており `moduleResolution: bundler` が有効だが、`Array.prototype.includes` などES2016以降のメソッドは型エラーになるため `indexOf` 等で代替すること。
+- **TypeScript constraints**: `tsconfig.json` sets `lib: ["ES6", "DOM"]` and `target: "ES6"`. TypeScript 5.x (`^5.3.0`) with `moduleResolution: bundler` is used, but methods like `Array.prototype.includes` (ES2016+) cause type errors — use `indexOf` etc. as alternatives.
 
-- **`obsidian` モジュールは external**（esbuildがバンドルしない）。Obsidianランタイムが提供するため、importは型定義のみの目的で使う。
+- **`obsidian` module is external** (not bundled by esbuild). Obsidian runtime provides it, so imports are for type definitions only.
 
-## Exported pure functions (テスト用)
+## Exported pure functions (for testing)
 
-ユニットテストのために以下の関数が `src/main.ts` からエクスポートされている：
+The following functions are exported from `src/main.ts` for unit testing:
 
-| 関数 | 用途 |
+| Function | Purpose |
 |---|---|
-| `resolveUiLang(uiLang, momentLocale)` | `uiLang` 設定値とObsidianロケールから実際の言語を返す |
-| `checkCanSummarize(settings)` | 現在の設定でAI要約が実行可能かを返す |
-| `buildNote(profile, item, ...)` | ノートのMarkdown文字列を生成する |
-| `sanitizeFilename(name)` | ファイル名に使えない文字をハイフンに変換する |
-| `defaultProfile(id, name)` | デフォルト値で Profile オブジェクトを生成する |
+| `resolveUiLang(uiLang, momentLocale)` | Returns the resolved language from `uiLang` setting and Obsidian locale |
+| `checkCanSummarize(settings)` | Returns whether AI summarization is available with current settings |
+| `buildNote(profile, item, ...)` | Generates the note Markdown string |
+| `sanitizeFilename(name)` | Converts characters invalid in filenames to hyphens |
+| `defaultProfile(id, name)` | Creates a Profile object with default values |
 
-## Git ワークフロー
+## Git workflow
 
-- **mainブランチへの直接pushは禁止**（ブランチ保護ルールあり）。必ずブランチを作成してPRを出すこと。
-- **新ブランチは必ず `main` から作成すること**。古いブランチから切るとマージ済み変更がdiffに混入する。
-- コミット後は `git push origin <branch>` → `gh pr create` の流れで進める。
-- スカッシュマージ後のブランチ削除は `git branch -D`（`-d` では "not fully merged" エラーになる）。
+- **Commit messages must be in English** (Obsidian has many international users). Example: `Add rate limit display to SyncModal`
+- **Never push directly to main** (branch protection rules enforced). Always create a branch and open a PR.
+- **Always cut new branches from `main`**. Branching from old branches causes merged changes to appear in diffs.
+- After committing: `git push origin <branch>` → `gh pr create`.
+- After squash merge, delete branches with `git branch -D` (`-d` gives "not fully merged" error).
 
-## Obsidian プラグイン審査（obsidianmd/obsidian-releases）
+## Obsidian plugin review (obsidianmd/obsidian-releases)
 
-- **ObsidianReviewBot** はmainブランチのソースコードをスキャンする（リリースタグ不要）。
-- ESLintルール（必須）:
-  - `any` 型禁止 → `window.moment` は `Window & { moment?: { locale?: () => string } }` で型付け
-  - `element.style.*` 直接指定禁止 → CSSクラス（`addClass/removeClass`）か `setCssProps({ "--var": val })` を使う
-  - `async` イベントハンドラ禁止 → `el.addEventListener("click", () => { void (async () => { ... })(); })`
-  - `createEl("h2/h3")` 禁止 → `new Setting(containerEl).setName(...).setHeading()` を使う
-  - コマンドIDにプラグインIDを含めない（`"sync"` ○ / `"repo-notes-sync"` ✗）
-  - `console.log` 禁止 → `console.debug/warn/error` を使う
-  - UIテキストはsentence case（固有名詞除く）
-  - `@ts-ignore` 禁止 → `@ts-expect-error -- <reason>` を使う
-- **コメントはすべて英語**（Obsidian コミュニティレビュアーが英語話者のため）
+- **ObsidianReviewBot** scans source code on the main branch (no release tag needed).
+- ESLint rules (required):
+  - No `any` types → type `window.moment` as `Window & { moment?: { locale?: () => string } }`
+  - No direct `element.style.*` → use CSS classes (`addClass/removeClass`) or `setCssProps({ "--var": val })`
+  - No `async` event handlers → `el.addEventListener("click", () => { void (async () => { ... })(); })`
+  - No `createEl("h2/h3")` → use `new Setting(containerEl).setName(...).setHeading()`
+  - Command IDs must not include the plugin ID (`"sync"` ✓ / `"repo-notes-sync"` ✗)
+  - No `console.log` → use `console.debug/warn/error`
+  - UI text must be sentence case (except proper nouns)
+  - No `@ts-ignore` → use `@ts-expect-error -- <reason>`
+- **All comments must be in English** (Obsidian community reviewers are English speakers)
 
 ## Release
 
-### 安定版リリース
+### Stable release
 
-タグをプッシュすると `.github/workflows/release.yml` が起動し、自動でリリースと CHANGELOG.md 更新PRを作成する。
+Pushing a tag triggers `.github/workflows/release.yml`, which automatically creates a release and opens a CHANGELOG.md update PR.
 
 ```bash
-# 1. manifest.json のバージョンを更新 → PR → mainにマージ
-# 2. タグをプッシュ（v プレフィックスなし）
+# 1. Update version in manifest.json → PR → merge to main
+# 2. Push tag (no `v` prefix)
 git tag 1.2.0
 git push origin 1.2.0
 ```
 
-- タグ形式は **`v` プレフィックスなし**（`v1.0.0` ではワークフローが発火しない）
-- リリース成果物: `main.js`, `manifest.json`, `styles.css`, `repo-notes.zip`
-- リリース後に `chore/changelog-<version>` ブランチのPRが自動作成されるのでマージする
+- Tag format: **no `v` prefix** (`v1.0.0` will not trigger the workflow)
+- Release assets: `main.js`, `manifest.json`, `styles.css`, `repo-notes.zip`
+- After release, merge the auto-created `chore/changelog-<version>` PR
 
-### Pre-release（beta / BRAT 配布）
+### Pre-release (beta / BRAT distribution)
 
-`.github/workflows/pre-release.yml` が `-` を含むタグで起動し、`prerelease: true` の GitHub Release を作成する。BRAT ユーザーが beta 版を試せる。
+`.github/workflows/pre-release.yml` triggers on tags containing `-` and creates a GitHub Release with `prerelease: true`. BRAT users can then install the beta.
 
 ```bash
-# 1. manifest.json のバージョンを beta バージョンに更新（例: 1.2.0-beta）→ PR → mainにマージ
-# 2. タグをプッシュ
-git tag 1.2.0-beta
-git push origin 1.2.0-beta
+# 1. Update manifest.json version to beta (e.g. 1.1.1-beta.1) → PR → merge to main
+# 2. Push tag
+git tag 1.1.1-beta.1
+git push origin 1.1.1-beta.1
 ```
 
-- タグ形式: `1.2.0-beta`, `1.2.0-beta.1`, `1.2.0-rc.1` など（`-` を含む）
-- CHANGELOG は更新しない（安定版リリース時にまとめて更新される）
-- 安定版リリース前に manifest.json を `1.2.0` に戻して PR → マージ → タグの流れ
+- Tag format: `1.1.1-beta.1`, `1.1.1-rc.1` etc. (must contain `-`)
+- CHANGELOG is not updated (will be updated at stable release)
+- Before stable release: update manifest.json to stable version → PR → merge → tag
