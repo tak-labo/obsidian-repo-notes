@@ -150,7 +150,7 @@ export default class RepoNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "sync",
-      name: "Sync",
+      name: "Sync all repos",
       callback: () => new SyncModal(this.app, this).open(),
     });
 
@@ -167,7 +167,7 @@ export default class RepoNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "sync-current-note",
-      name: "Sync current note",
+      name: "Sync this note",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return false;
@@ -180,7 +180,7 @@ export default class RepoNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "summarize-current-note",
-      name: "AI summarize this repo note",
+      name: "Summarize this note",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return false;
@@ -193,7 +193,7 @@ export default class RepoNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "check-rate-limit",
-      name: "Check GitHub API rate limit",
+      name: "Check API rate limit",
       callback: () => {
         const profile = this.settings.profiles.find((p) => p.githubToken);
         if (!profile) {
