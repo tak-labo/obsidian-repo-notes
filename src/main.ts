@@ -65,6 +65,12 @@ export interface Profile {
   };
 }
 
+interface RateLimitResponse {
+  resources: {
+    core: { limit: number; remaining: number; reset: number; used: number };
+  };
+}
+
 interface RepoNotesSettings {
   profiles: Profile[];
   anthropicApiKey: string;
@@ -696,6 +702,16 @@ export default class RepoNotesPlugin extends Plugin {
 
   // ─── GitHub API ──────────────────────────────────────────────────────────────
 
+  async fetchRateLimit(token: string): Promise<{ remaining: number; limit: number; reset: number }> {
+    const res = await requestUrl({
+      url: "https://api.github.com/rate_limit",
+      headers: { Authorization: `token ${token}` },
+    });
+    if (res.status !== 200) throw new Error(`GitHub API error: ${res.status}`);
+    const data = res.json as RateLimitResponse;
+    return data.resources.core;
+  }
+
   private async fetchSingleRepo(token: string, fullName: string): Promise<GitHubRepo> {
     const res = await requestUrl({
       url: `https://api.github.com/repos/${fullName}`,
@@ -1029,6 +1045,7 @@ class SyncModal extends Modal {
   progressEl: HTMLElement;
   progressBar: HTMLElement;
   statsEl: HTMLElement;
+  rateLimitEl: HTMLElement;
   running = false;
   aborted = false;
   initialProfileId: string | null;
@@ -1065,6 +1082,8 @@ class SyncModal extends Modal {
     const progressWrap = contentEl.createDiv("gs-progress-wrap");
     this.progressEl = progressWrap.createDiv("gs-status-text");
     this.progressBar = progressWrap.createDiv("gs-track").createDiv("gs-fill");
+
+    this.rateLimitEl = contentEl.createDiv("repo-notes-rate-limit");
 
     this.statsEl = contentEl.createDiv("gs-stats");
     this.statsEl.addClass("repo-notes-hidden");
@@ -1143,6 +1162,23 @@ class SyncModal extends Modal {
       if (lastSynced?.mine) dates.push(`Mine: ${lastSynced.mine.split("T")[0]}`);
       const label = dates.length > 0 ? `${t.modalReady} (${t.lastSynced(dates.join(", "))})` : t.modalReady;
       this.progressEl.setText(label);
+
+      void (async () => {
+        try {
+          const { remaining, limit, reset } = await this.plugin.fetchRateLimit(profile.githubToken);
+          const LOW_THRESHOLD = Math.floor(limit * 0.1);
+          if (remaining < LOW_THRESHOLD) {
+            const resetTime = new Date(reset * 1000).toLocaleTimeString();
+            this.rateLimitEl.setText(t.rateLimitWarn(remaining, limit, resetTime));
+            this.rateLimitEl.addClass("repo-notes-rate-limit-warn");
+          } else {
+            this.rateLimitEl.setText(t.rateLimit(remaining, limit));
+          }
+        } catch {
+          this.rateLimitEl.setText(t.rateLimitError);
+        }
+      })();
+
       syncBtn.click();
     } else {
       this.progressEl.setText(t.modalNoToken);
