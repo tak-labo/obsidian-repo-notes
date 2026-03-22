@@ -157,6 +157,35 @@ export default class RepoNotesPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "sync-current-note",
+      name: "Sync current note",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return false;
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        if (!fm?.repo || !fm?.source) return false;
+        if (!checking) void this.syncCurrentNote(file);
+        return true;
+      },
+    });
+
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (!(file instanceof TFile) || file.extension !== "md") return;
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        if (!fm?.repo || !fm?.source) return;
+        menu.addItem((menuItem) =>
+          menuItem
+            .setTitle(this.t.syncThisNote)
+            .setIcon("refresh-cw")
+            .onClick(() => {
+              void this.syncCurrentNote(file);
+            })
+        );
+      })
+    );
+
     this.addSettingTab(new RepoNotesSettingTab(this.app, this));
 
     if (this.settings.autoSyncOnStartup) {
@@ -307,6 +336,95 @@ export default class RepoNotesPlugin extends Plugin {
       await this.saveSettings();
     }
     onResult?.(totalSaved, totalSkipped, totalErrors, totalCount);
+  }
+
+  async syncCurrentNote(file: TFile): Promise<void> {
+    const t = this.t;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const fullName = fm?.repo as string | undefined;
+    const source = fm?.source as string | undefined;
+    const profileName = fm?.profile as string | undefined;
+
+    if (!fullName || !source || !profileName) {
+      new Notice(t.noticeNotARepoNote);
+      return;
+    }
+
+    const profile = this.settings.profiles.find((p) => p.name === profileName);
+    if (!profile?.githubToken) {
+      new Notice(t.noticeNoToken(profileName));
+      return;
+    }
+
+    let mode: "stars" | "mine" | "org";
+
+    if (source === "starred") {
+      mode = "stars";
+    } else if (source === "org-repo") {
+      mode = "org";
+    } else {
+      mode = "mine";
+    }
+
+    new Notice(t.noticeSyncingNote(fullName));
+
+    try {
+      const repo = await this.fetchSingleRepo(profile.githubToken, fullName);
+
+      const starredAt = source === "starred" ? (fm?.starred_at as string | undefined) : undefined;
+      const item: StarredItem = starredAt ? { starred_at: starredAt, repo } : { repo };
+
+      let commitCount = -1;
+      if (profile.includeCommitCount) {
+        try {
+          commitCount = await this.fetchCommitCount(
+            profile.githubToken,
+            fullName,
+            repo.default_branch ?? "main"
+          );
+        } catch {
+          commitCount = -1;
+        }
+      }
+
+      let readmeRaw: string | null = null;
+      let readmeSummary: string | null = null;
+      if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
+        readmeRaw = await this.fetchReadme(profile.githubToken, fullName);
+      }
+      if (profile.includeReadmeExcerpt && checkCanSummarize(this.settings) && readmeRaw) {
+        readmeSummary = await this.summarizeReadme(readmeRaw, fullName);
+      }
+
+      const summaryMeta = readmeSummary
+        ? {
+            provider: this.settings.summaryProvider,
+            model:
+              this.settings.summaryProvider === "anthropic"
+                ? this.settings.anthropicModel
+                : this.settings.summaryModel,
+          }
+        : null;
+
+      const existingContent = await this.app.vault.read(file);
+      const existingMemo = extractMemo(existingContent);
+
+      const content = buildNote(
+        profile,
+        item,
+        commitCount,
+        readmeSummary,
+        readmeRaw,
+        mode,
+        summaryMeta,
+        existingMemo
+      );
+      await this.app.vault.modify(file, content);
+
+      new Notice(t.noticeSyncedNote(fullName));
+    } catch (e) {
+      new Notice(t.noticeError((e as Error).message));
+    }
   }
 
   private async syncRepoList(
@@ -467,6 +585,15 @@ export default class RepoNotesPlugin extends Plugin {
   }
 
   // ─── GitHub API ──────────────────────────────────────────────────────────────
+
+  private async fetchSingleRepo(token: string, fullName: string): Promise<GitHubRepo> {
+    const res = await requestUrl({
+      url: `https://api.github.com/repos/${fullName}`,
+      headers: { Authorization: `token ${token}` },
+    });
+    if (res.status !== 200) throw new Error(`GitHub API error: ${res.status}`);
+    return res.json as GitHubRepo;
+  }
 
   private async fetchAllStars(token: string): Promise<StarredItem[]> {
     const items: StarredItem[] = [];
