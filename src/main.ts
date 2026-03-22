@@ -397,6 +397,13 @@ export default class RepoNotesPlugin extends Plugin {
           const isUpdated =
             forceSync || !exists || !lastSyncedAt || !repoUpdatedAt || new Date(repoUpdatedAt) > lastSyncedAt;
 
+          // Skip write entirely when repo has not changed since last sync.
+          // The existing note already has valid README/summary content.
+          if (!isUpdated && exists) {
+            skipped++;
+            continue;
+          }
+
           let readmeRaw: string | null = null;
           let readmeSummary: string | null = null;
           if (isUpdated && (profile.includeReadmeRaw || profile.includeReadmeExcerpt)) {

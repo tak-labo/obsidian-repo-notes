@@ -142,9 +142,9 @@ const translations = {
     modalAbort: "中止",
     modalAborted: "中止しました",
     modalClose: "閉じる",
-    modalForceSyncBtn: "Force sync",
+    modalForceSyncBtn: "強制同期",
     modalForceSyncConfirm:
-      "Force sync はすべてのリポジトリを再処理します（変更がないものも含む）。時間がかかる場合があります。AI要約が有効な場合はAPIコストが発生します。続行しますか？",
+      "強制同期はすべてのリポジトリを再処理します（変更がないものも含む）。時間がかかる場合があります。AI要約が有効な場合はAPIコストが発生します。続行しますか？",
     lastSynced: (date: string) => `前回sync: ${date}`,
     modalNoToken: "⚠️ 設定からGitHubトークンを入力してください",
     statTotal: "合計",
