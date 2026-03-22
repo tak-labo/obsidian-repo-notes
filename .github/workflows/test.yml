@@ -83,25 +83,26 @@ jobs:
           try {
             const results = JSON.parse(fs.readFileSync("/tmp/lint-results.json", "utf8"));
             const errors = [];
+            let filesChecked = 0;
             for (const file of results) {
+              if (file.messages.length > 0 || file.errorCount > 0 || file.warningCount > 0) filesChecked++;
               const rel = file.filePath.replace(process.cwd() + "/", "");
               for (const msg of file.messages) {
                 errors.push({ file: rel, line: msg.line, col: msg.column, rule: msg.ruleId, message: msg.message, severity: msg.severity });
               }
             }
+            const totalFiles = results.length;
+            lines.push(`### 🔍 Lint — ${errors.length === 0 ? "✅ No issues" : `❌ ${errors.length} issue(s)`} in ${totalFiles} files`);
+            lines.push("");
+            lines.push("| File | Line | Rule | Severity | Message |");
+            lines.push("|------|------|------|----------|---------|");
             if (errors.length === 0) {
-              lines.push("🔍 **Lint: No issues found**");
+              lines.push("| — | — | — | — | No lint issues found |");
             } else {
-              lines.push(`<details open>`);
-              lines.push(`<summary>🔍 Lint issues (${errors.length})</summary>`);
-              lines.push("");
-              lines.push("| File | Line | Rule | Message |");
-              lines.push("|------|------|------|---------|");
               for (const e of errors) {
-                const sev = e.severity === 2 ? "🔴" : "🟡";
-                lines.push(`| \`${e.file}\` | ${e.line}:${e.col} | \`${e.rule}\` | ${sev} ${e.message} |`);
+                const sev = e.severity === 2 ? "🔴 error" : "🟡 warning";
+                lines.push(`| \`${e.file}\` | ${e.line}:${e.col} | \`${e.rule}\` | ${sev} | ${e.message} |`);
               }
-              lines.push("</details>");
             }
             lines.push("");
           } catch (_) {}
