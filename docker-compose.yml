@@ -19,3 +19,10 @@ services:
     volumes:
       - .:/app
     command: sh -c "npm ci && npm run lint"
+
+  format-check:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm ci && npm run format:check"

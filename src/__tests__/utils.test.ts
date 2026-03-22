@@ -68,66 +68,80 @@ describe("resolveUiLang", () => {
 
 describe("checkCanSummarize", () => {
   it("Anthropicプロバイダー: APIキーあり → true", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "anthropic",
-      anthropicApiKey: "sk-ant-api03-xxx",
-      summaryBaseUrl: "",
-      summaryModel: "",
-    })).toBe(true);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "anthropic",
+        anthropicApiKey: "sk-ant-api03-xxx",
+        summaryBaseUrl: "",
+        summaryModel: "",
+      })
+    ).toBe(true);
   });
 
   it("Anthropicプロバイダー: APIキーなし → false", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "anthropic",
-      anthropicApiKey: "",
-      summaryBaseUrl: "",
-      summaryModel: "",
-    })).toBe(false);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "anthropic",
+        anthropicApiKey: "",
+        summaryBaseUrl: "",
+        summaryModel: "",
+      })
+    ).toBe(false);
   });
 
   it("OpenAI互換プロバイダー: BaseURLとモデルあり → true", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "openai-compatible",
-      anthropicApiKey: "",
-      summaryBaseUrl: "http://localhost:11434/v1",
-      summaryModel: "llama3.2",
-    })).toBe(true);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai-compatible",
+        anthropicApiKey: "",
+        summaryBaseUrl: "http://localhost:11434/v1",
+        summaryModel: "llama3.2",
+      })
+    ).toBe(true);
   });
 
   it("OpenAI互換プロバイダー: BaseURLなし → false", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "openai-compatible",
-      anthropicApiKey: "sk-ant-api03-xxx",
-      summaryBaseUrl: "",
-      summaryModel: "llama3.2",
-    })).toBe(false);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai-compatible",
+        anthropicApiKey: "sk-ant-api03-xxx",
+        summaryBaseUrl: "",
+        summaryModel: "llama3.2",
+      })
+    ).toBe(false);
   });
 
   it("OpenAI互換プロバイダー: モデルなし → false", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "openai-compatible",
-      anthropicApiKey: "sk-ant-api03-xxx",
-      summaryBaseUrl: "http://localhost:11434/v1",
-      summaryModel: "",
-    })).toBe(false);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai-compatible",
+        anthropicApiKey: "sk-ant-api03-xxx",
+        summaryBaseUrl: "http://localhost:11434/v1",
+        summaryModel: "",
+      })
+    ).toBe(false);
   });
 
   it("OpenAI互換プロバイダー: BaseURLとモデル両方なし → false", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "openai-compatible",
-      anthropicApiKey: "",
-      summaryBaseUrl: "",
-      summaryModel: "",
-    })).toBe(false);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai-compatible",
+        anthropicApiKey: "",
+        summaryBaseUrl: "",
+        summaryModel: "",
+      })
+    ).toBe(false);
   });
 
   it("OpenAI互換プロバイダー: APIキーなしでもBaseURL+モデルがあれば true（Ollama想定）", () => {
-    expect(checkCanSummarize({
-      summaryProvider: "openai-compatible",
-      anthropicApiKey: "",
-      summaryBaseUrl: "http://localhost:11434/v1",
-      summaryModel: "mistral",
-    })).toBe(true);
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai-compatible",
+        anthropicApiKey: "",
+        summaryBaseUrl: "http://localhost:11434/v1",
+        summaryModel: "mistral",
+      })
+    ).toBe(true);
   });
 });
 
@@ -326,7 +340,10 @@ describe("buildNote", () => {
   });
 
   it("summaryMeta を frontmatter に記録する", () => {
-    const note = buildNote(profile, mockStarredItem, -1, "summary text", null, "stars", { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
+    const note = buildNote(profile, mockStarredItem, -1, "summary text", null, "stars", {
+      provider: "anthropic",
+      model: "claude-haiku-4-5-20251001",
+    });
     expect(note).toContain("summary_provider: anthropic");
     expect(note).toContain("summary_model: claude-haiku-4-5-20251001");
   });

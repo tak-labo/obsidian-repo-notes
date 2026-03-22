@@ -14,7 +14,8 @@ const translations = {
     modalAborted: "Stopped",
     modalClose: "Close",
     modalForceSyncBtn: "Force sync",
-    modalForceSyncConfirm: "Force Sync will re-process all repos including unchanged ones. This may take a long time and incur AI summarization costs if enabled. Continue?",
+    modalForceSyncConfirm:
+      "Force Sync will re-process all repos including unchanged ones. This may take a long time and incur AI summarization costs if enabled. Continue?",
     lastSynced: (date: string) => `last synced: ${date}`,
     modalNoToken: "⚠️ Please enter your GitHub token in settings",
     statTotal: "TOTAL",
@@ -31,7 +32,8 @@ const translations = {
 
     sectionAuth: "Authentication",
     tokenName: "GitHub Personal Access Token",
-    tokenDesc: "Classic (ghp_...) or Fine-grained (github_pat_...) both supported. Required scopes: Stars → public_repo, Private repos → repo",
+    tokenDesc:
+      "Classic (ghp_...) or Fine-grained (github_pat_...) both supported. Required scopes: Stars → public_repo, Private repos → repo",
     tokenPlaceholder: "ghp_... or github_pat_...",
 
     sectionStars: "⭐ Starred Repositories",
@@ -102,7 +104,8 @@ const translations = {
     // Organizations
     sectionOrgs: "🏢 Organizations",
     orgNames: "Organization names",
-    orgNamesDesc: "Repos from these orgs will be saved in a subfolder named after each org (under My Repos parent folder). Requires org:read scope or Fine-grained with org access.",
+    orgNamesDesc:
+      "Repos from these orgs will be saved in a subfolder named after each org (under My Repos parent folder). Requires org:read scope or Fine-grained with org access.",
     orgNamesPlaceholder: "my-company\nanother-org",
 
     // Folder picker
@@ -140,7 +143,8 @@ const translations = {
     modalAborted: "中止しました",
     modalClose: "閉じる",
     modalForceSyncBtn: "Force sync",
-    modalForceSyncConfirm: "Force sync はすべてのリポジトリを再処理します（変更がないものも含む）。時間がかかる場合があります。AI要約が有効な場合はAPIコストが発生します。続行しますか？",
+    modalForceSyncConfirm:
+      "Force sync はすべてのリポジトリを再処理します（変更がないものも含む）。時間がかかる場合があります。AI要約が有効な場合はAPIコストが発生します。続行しますか？",
     lastSynced: (date: string) => `前回sync: ${date}`,
     modalNoToken: "⚠️ 設定からGitHubトークンを入力してください",
     statTotal: "合計",
@@ -157,7 +161,8 @@ const translations = {
 
     sectionAuth: "認証",
     tokenName: "GitHub Personal Access Token",
-    tokenDesc: "Classic (ghp_...) または Fine-grained (github_pat_...) どちらも対応。必要なスコープ: Stars同期→public_repo、プライベートRepo→repo",
+    tokenDesc:
+      "Classic (ghp_...) または Fine-grained (github_pat_...) どちらも対応。必要なスコープ: Stars同期→public_repo、プライベートRepo→repo",
     tokenPlaceholder: "ghp_... または github_pat_...",
 
     sectionStars: "⭐ Star済みリポジトリ",
@@ -228,7 +233,8 @@ const translations = {
     // Organizations
     sectionOrgs: "🏢 Organizations",
     orgNames: "Organization名",
-    orgNamesDesc: "指定したOrgのリポジトリを同期します。各Orgのサブフォルダに保存されます（自分のRepoの親フォルダ配下）。スコープ: read:org または Fine-grained でOrg権限が必要。",
+    orgNamesDesc:
+      "指定したOrgのリポジトリを同期します。各Orgのサブフォルダに保存されます（自分のRepoの親フォルダ配下）。スコープ: read:org または Fine-grained でOrg権限が必要。",
     orgNamesPlaceholder: "my-company\nanother-org",
 
     // Folder picker

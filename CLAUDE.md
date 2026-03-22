@@ -16,7 +16,7 @@ npm test             # Vitest でユニットテストを実行
 npm run test:watch   # ウォッチモードでテストを実行
 ```
 
-Docker で実行する場合は `docker compose run --rm build` / `docker compose run --rm test` / `docker compose run --rm lint`。
+Docker で実行する場合は `docker compose run --rm build` / `docker compose run --rm test` / `docker compose run --rm lint` / `docker compose run --rm format-check`。
 
 テストファイルは `src/__tests__/`、Obsidian API のモックは `src/__mocks__/obsidian.ts`。
 

@@ -38,19 +38,26 @@ jobs:
         run: npx eslint src/ --format json --output-file /tmp/lint-results.json || true
         continue-on-error: true
 
+      - name: Format check
+        id: format
+        run: npx prettier --check src/ 2>&1 | tee /tmp/format-output.txt
+        continue-on-error: true
+
       - name: Write job summary
         if: always()
         env:
           BUILD_OUTCOME: ${{ steps.build.outcome }}
           TEST_OUTCOME: ${{ steps.test.outcome }}
           LINT_OUTCOME: ${{ steps.lint.outcome }}
+          FORMAT_OUTCOME: ${{ steps.format.outcome }}
         run: |
           node << 'EOF'
           const fs = require("fs");
 
-          const buildOk = process.env.BUILD_OUTCOME === "success";
-          const testOk  = process.env.TEST_OUTCOME  === "success";
-          const lintOk  = process.env.LINT_OUTCOME  === "success";
+          const buildOk  = process.env.BUILD_OUTCOME  === "success";
+          const testOk   = process.env.TEST_OUTCOME   === "success";
+          const lintOk   = process.env.LINT_OUTCOME   === "success";
+          const formatOk = process.env.FORMAT_OUTCOME === "success";
 
           const icon = (ok) => ok ? "✅" : "❌";
           const lines = [];
@@ -60,9 +67,10 @@ jobs:
           lines.push("");
           lines.push("| | Step | Status |");
           lines.push("|---|---|---|");
-          lines.push(`| 🔨 | Build | ${icon(buildOk)} ${buildOk ? "Passed" : "Failed"} |`);
-          lines.push(`| 🧪 | Test  | ${icon(testOk)} ${testOk ? "Passed" : "Failed"} |`);
-          lines.push(`| 🔍 | Lint  | ${icon(lintOk)} ${lintOk ? "Passed" : "Failed"} |`);
+          lines.push(`| 🔨 | Build  | ${icon(buildOk)} ${buildOk ? "Passed" : "Failed"} |`);
+          lines.push(`| 🧪 | Test   | ${icon(testOk)} ${testOk ? "Passed" : "Failed"} |`);
+          lines.push(`| 🔍 | Lint   | ${icon(lintOk)} ${lintOk ? "Passed" : "Failed"} |`);
+          lines.push(`| 🎨 | Format | ${icon(formatOk)} ${formatOk ? "Passed" : "Failed"} |`);
           lines.push("");
 
           // ── Test output ───────────────────────────────────────────────
@@ -105,6 +113,21 @@ jobs:
               }
             }
             lines.push("");
+          } catch (_) {}
+
+          // ── Prettier output ───────────────────────────────────────────
+          try {
+            const fmtOut = fs.readFileSync("/tmp/format-output.txt", "utf8").trim();
+            if (!formatOk && fmtOut) {
+              lines.push("### 🎨 Format issues");
+              lines.push("");
+              lines.push("Run `npm run format` to auto-fix.");
+              lines.push("");
+              lines.push("```");
+              lines.push(fmtOut);
+              lines.push("```");
+              lines.push("");
+            }
           } catch (_) {}
 
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
