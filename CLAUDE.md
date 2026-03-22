@@ -91,6 +91,8 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
   - コマンドIDにプラグインIDを含めない（`"sync"` ○ / `"repo-notes-sync"` ✗）
   - `console.log` 禁止 → `console.debug/warn/error` を使う
   - UIテキストはsentence case（固有名詞除く）
+  - `@ts-ignore` 禁止 → `@ts-expect-error -- <reason>` を使う
+- **コメントはすべて英語**（Obsidian コミュニティレビュアーが英語話者のため）
 
 ## Release
 
