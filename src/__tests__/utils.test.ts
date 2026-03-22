@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeFilename, buildNote, defaultProfile, checkCanSummarize, resolveUiLang, extractMemo } from "../main";
+import { sanitizeFilename, buildNote, defaultProfile, checkCanSummarize, resolveUiLang, extractMemo, extractSummary } from "../main";
 import type { StarredItem, GitHubRepo } from "../main";
 
 // ─── テスト用フィクスチャ ─────────────────────────────────────────────────────
@@ -428,5 +428,28 @@ describe("extractMemo", () => {
   it("空の Memo セクションの場合", () => {
     const content = "---\n---\n## Memo\n\n## Summary\ntext";
     expect(extractMemo(content)).toBe("\n");
+  });
+});
+
+// ─── extractSummary ───────────────────────────────────────────────────────────
+
+describe("extractSummary", () => {
+  it("Summary セクションがない場合は空文字を返す", () => {
+    expect(extractSummary("---\nfoo: bar\n---\n## Memo\ntext")).toBe("");
+  });
+
+  it("Summary の内容を抽出する", () => {
+    const content = "---\n---\n## Memo\n\n## Summary\nai generated text\n\n## README\nraw";
+    expect(extractSummary(content)).toBe("ai generated text");
+  });
+
+  it("ファイル末尾の Summary を抽出する", () => {
+    const content = "---\n---\n## Memo\n\n## Summary\nonly summary here";
+    expect(extractSummary(content)).toBe("only summary here");
+  });
+
+  it("複数行の Summary を抽出する", () => {
+    const content = "---\n---\n## Summary\nline one\nline two\n\n## README\nraw";
+    expect(extractSummary(content)).toBe("line one\nline two");
   });
 });

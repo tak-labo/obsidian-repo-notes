@@ -448,7 +448,7 @@ export default class RepoNotesPlugin extends Plugin {
       }
 
       let readmeRaw: string | null = null;
-      if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
+      if (profile.includeReadmeRaw) {
         readmeRaw = await this.fetchReadme(profile.githubToken, fullName);
       }
 
