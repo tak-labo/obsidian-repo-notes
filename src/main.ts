@@ -448,26 +448,21 @@ export default class RepoNotesPlugin extends Plugin {
       }
 
       let readmeRaw: string | null = null;
-      let readmeSummary: string | null = null;
       if (profile.includeReadmeRaw || profile.includeReadmeExcerpt) {
         readmeRaw = await this.fetchReadme(profile.githubToken, fullName);
       }
-      if (profile.includeReadmeExcerpt && checkCanSummarize(this.settings) && readmeRaw) {
-        readmeSummary = await this.summarizeReadme(readmeRaw, fullName);
-      }
 
-      const summaryMeta = readmeSummary
-        ? {
-            provider: this.settings.summaryProvider,
-            model:
-              this.settings.summaryProvider === "anthropic"
-                ? this.settings.anthropicModel
-                : this.settings.summaryModel,
-          }
-        : null;
-
+      // Sync does not call AI — preserve the existing summary from the note
       const existingContent = await this.app.vault.read(file);
       const existingMemo = extractMemo(existingContent);
+      const readmeSummary = extractSummary(existingContent) || null;
+      const summaryMeta =
+        readmeSummary && fm?.summary_provider && fm?.summary_model
+          ? {
+              provider: fm.summary_provider as string,
+              model: fm.summary_model as string,
+            }
+          : null;
 
       const content = buildNote(
         profile,
@@ -522,22 +517,28 @@ export default class RepoNotesPlugin extends Plugin {
     new Notice(t.noticeSummarizingNote(fullName));
 
     try {
-      const repo = await this.fetchSingleRepo(profile.githubToken, fullName);
+      // Reconstruct repo from frontmatter to avoid re-syncing metadata
+      const repo: GitHubRepo = {
+        full_name: fullName,
+        html_url: (fm?.url as string) ?? `https://github.com/${fullName}`,
+        homepage: null,
+        description: (fm?.description as string | null) ?? null,
+        language: (fm?.language as string | null) ?? null,
+        stargazers_count: (fm?.stars as number) ?? 0,
+        forks_count: (fm?.forks as number) ?? 0,
+        pushed_at: (fm?.last_updated as string) ?? "",
+        updated_at: (fm?.last_updated as string) ?? "",
+        created_at: "",
+        topics: (fm?.tags as string[]) ?? [],
+        default_branch: "main",
+        private: false,
+        fork: false,
+      };
       const starredAt = source === "starred" ? (fm?.starred_at as string | undefined) : undefined;
       const item: StarredItem = starredAt ? { starred_at: starredAt, repo } : { repo };
 
-      let commitCount = -1;
-      if (profile.includeCommitCount) {
-        try {
-          commitCount = await this.fetchCommitCount(
-            profile.githubToken,
-            fullName,
-            repo.default_branch ?? "main"
-          );
-        } catch {
-          commitCount = -1;
-        }
-      }
+      // Use existing commit count from frontmatter — no re-fetch
+      const commitCount = (fm?.commits as number | null) ?? -1;
 
       const readmeRaw = await this.fetchReadme(profile.githubToken, fullName);
       const readmeSummary = readmeRaw ? await this.summarizeReadme(readmeRaw, fullName) : null;
@@ -1008,6 +1009,15 @@ export function extractMemo(content: string): string {
   const afterMemo = content.slice(memoStart + "## Memo\n".length);
   const nextHeading = afterMemo.search(/^## /m);
   return nextHeading === -1 ? afterMemo : afterMemo.slice(0, nextHeading);
+}
+
+export function extractSummary(content: string): string {
+  const summaryStart = content.indexOf("## Summary\n");
+  if (summaryStart === -1) return "";
+  const afterSummary = content.slice(summaryStart + "## Summary\n".length);
+  const nextHeading = afterSummary.search(/^## /m);
+  const raw = nextHeading === -1 ? afterSummary : afterSummary.slice(0, nextHeading);
+  return raw.trimEnd();
 }
 
 export function buildNote(
