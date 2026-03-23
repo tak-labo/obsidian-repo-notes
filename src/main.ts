@@ -219,7 +219,7 @@ export default class RepoNotesPlugin extends Plugin {
             } else {
               new Notice(t.rateLimit(remaining, limit));
             }
-          } catch (e) {
+          } catch {
             new Notice(this.t.rateLimitError);
           }
         })();
