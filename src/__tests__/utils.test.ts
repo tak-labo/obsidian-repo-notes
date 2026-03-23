@@ -74,6 +74,8 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "sk-ant-api03-xxx",
         summaryBaseUrl: "",
         summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(true);
   });
@@ -85,6 +87,8 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "",
         summaryBaseUrl: "",
         summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(false);
   });
@@ -96,6 +100,8 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "",
         summaryBaseUrl: "http://localhost:11434/v1",
         summaryModel: "llama3.2",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(true);
   });
@@ -107,6 +113,8 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "sk-ant-api03-xxx",
         summaryBaseUrl: "",
         summaryModel: "llama3.2",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(false);
   });
@@ -118,6 +126,8 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "sk-ant-api03-xxx",
         summaryBaseUrl: "http://localhost:11434/v1",
         summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(false);
   });
@@ -129,6 +139,8 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "",
         summaryBaseUrl: "",
         summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(false);
   });
@@ -140,8 +152,62 @@ describe("checkCanSummarize", () => {
         anthropicApiKey: "",
         summaryBaseUrl: "http://localhost:11434/v1",
         summaryModel: "mistral",
+        geminiApiKey: "",
+        openaiApiKey: "",
       })
     ).toBe(true);
+  });
+
+  it("Gemini provider with API key → true", () => {
+    expect(
+      checkCanSummarize({
+        summaryProvider: "gemini",
+        anthropicApiKey: "",
+        summaryBaseUrl: "",
+        summaryModel: "",
+        geminiApiKey: "AIza-xxx",
+        openaiApiKey: "",
+      })
+    ).toBe(true);
+  });
+
+  it("Gemini provider without API key → false", () => {
+    expect(
+      checkCanSummarize({
+        summaryProvider: "gemini",
+        anthropicApiKey: "",
+        summaryBaseUrl: "",
+        summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "",
+      })
+    ).toBe(false);
+  });
+
+  it("OpenAI provider with API key → true", () => {
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai",
+        anthropicApiKey: "",
+        summaryBaseUrl: "",
+        summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "sk-xxx",
+      })
+    ).toBe(true);
+  });
+
+  it("OpenAI provider without API key → false", () => {
+    expect(
+      checkCanSummarize({
+        summaryProvider: "openai",
+        anthropicApiKey: "",
+        summaryBaseUrl: "",
+        summaryModel: "",
+        geminiApiKey: "",
+        openaiApiKey: "",
+      })
+    ).toBe(false);
   });
 });
 

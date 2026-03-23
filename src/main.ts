@@ -79,11 +79,15 @@ interface RepoNotesSettings {
   uiLang: "auto" | Lang;
   autoSyncOnStartup: boolean;
   autoSyncProfileId: string;
-  summaryProvider: "anthropic" | "openai-compatible";
+  summaryProvider: "anthropic" | "openai-compatible" | "gemini" | "openai";
   anthropicModel: string;
   summaryBaseUrl: string;
   summaryModel: string;
   summaryApiKey: string;
+  geminiApiKey: string;
+  geminiModel: string;
+  openaiApiKey: string;
+  openaiModel: string;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -127,6 +131,10 @@ const DEFAULT_SETTINGS: RepoNotesSettings = {
   summaryBaseUrl: "",
   summaryModel: "",
   summaryApiKey: "",
+  geminiApiKey: "",
+  geminiModel: "gemini-2.0-flash",
+  openaiApiKey: "",
+  openaiModel: "gpt-4o-mini",
 };
 
 function genId(): string {
@@ -211,7 +219,7 @@ export default class RepoNotesPlugin extends Plugin {
             } else {
               new Notice(t.rateLimit(remaining, limit));
             }
-          } catch (e) {
+          } catch {
             new Notice(this.t.rateLimitError);
           }
         })();
@@ -298,6 +306,12 @@ export default class RepoNotesPlugin extends Plugin {
     }
     if (!this.settings.anthropicModel) {
       this.settings.anthropicModel = "claude-haiku-4-5-20251001";
+    }
+    if (!this.settings.geminiModel) {
+      this.settings.geminiModel = "gemini-2.0-flash";
+    }
+    if (!this.settings.openaiModel) {
+      this.settings.openaiModel = "gpt-4o-mini";
     }
     // Migrate: if uiLang was not explicitly saved (old default "en"), reset to "auto"
     if (!saved || !saved.uiLang) {
@@ -553,7 +567,11 @@ export default class RepoNotesPlugin extends Plugin {
             model:
               this.settings.summaryProvider === "anthropic"
                 ? this.settings.anthropicModel
-                : this.settings.summaryModel,
+                : this.settings.summaryProvider === "gemini"
+                  ? this.settings.geminiModel
+                  : this.settings.summaryProvider === "openai"
+                    ? this.settings.openaiModel
+                    : this.settings.summaryModel,
           }
         : null;
 
@@ -575,7 +593,7 @@ export default class RepoNotesPlugin extends Plugin {
       );
       await this.app.vault.modify(file, content);
 
-      new Notice(t.noticeSummarizedNote(fullName));
+      if (readmeSummary) new Notice(t.noticeSummarizedNote(fullName));
     } catch (e) {
       new Notice(t.noticeError((e as Error).message));
     }
@@ -692,7 +710,11 @@ export default class RepoNotesPlugin extends Plugin {
                 model:
                   this.settings.summaryProvider === "anthropic"
                     ? this.settings.anthropicModel
-                    : this.settings.summaryModel,
+                    : this.settings.summaryProvider === "gemini"
+                      ? this.settings.geminiModel
+                      : this.settings.summaryProvider === "openai"
+                        ? this.settings.openaiModel
+                        : this.settings.summaryModel,
               }
             : null;
 
@@ -853,6 +875,12 @@ export default class RepoNotesPlugin extends Plugin {
     if (this.settings.summaryProvider === "openai-compatible") {
       return this.summarizeReadmeOpenAI(readmeText, repoName);
     }
+    if (this.settings.summaryProvider === "gemini") {
+      return this.summarizeReadmeGemini(readmeText, repoName);
+    }
+    if (this.settings.summaryProvider === "openai") {
+      return this.summarizeReadmeOpenAINative(readmeText, repoName);
+    }
     return this.summarizeReadmeAnthropic(readmeText, repoName);
   }
 
@@ -863,8 +891,9 @@ export default class RepoNotesPlugin extends Plugin {
       const res = await requestUrl({
         url: "https://api.anthropic.com/v1/messages",
         method: "POST",
+        throw: false,
         headers: {
-          "x-api-key": this.settings.anthropicApiKey,
+          "x-api-key": this.settings.anthropicApiKey.trim(),
           "anthropic-version": "2023-06-01",
           "content-type": "application/json",
         },
@@ -880,12 +909,16 @@ export default class RepoNotesPlugin extends Plugin {
         }),
       });
       if (res.status !== 200) {
-        console.error(`[repo-notes] Anthropic API error: status=${res.status}`, res.json);
+        const errType = res.json?.error?.type ?? "unknown";
+        const errMsg = res.json?.error?.message ?? JSON.stringify(res.json);
+        console.error(`[repo-notes] Anthropic API error: status=${res.status} type=${errType} message=${errMsg}`);
+        new Notice(this.t.noticeAiError(errMsg));
         return null;
       }
       return res.json?.content?.[0]?.text ?? null;
     } catch (e) {
       console.error("[repo-notes] Anthropic API request failed:", e);
+      new Notice(this.t.noticeAiError((e as Error).message));
       return null;
     }
   }
@@ -902,10 +935,11 @@ export default class RepoNotesPlugin extends Plugin {
       const res = await requestUrl({
         url: `${baseUrl}/chat/completions`,
         method: "POST",
+        throw: false,
         headers,
         body: JSON.stringify({
           model: this.settings.summaryModel,
-          max_tokens: 4000,
+          max_tokens: 400,
           messages: [
             {
               role: "system",
@@ -920,7 +954,9 @@ export default class RepoNotesPlugin extends Plugin {
         }),
       });
       if (res.status !== 200) {
+        const errMsg = res.json?.error?.message ?? JSON.stringify(res.json);
         console.error(`[repo-notes] OpenAI-compatible API error: status=${res.status}`, res.json);
+        new Notice(this.t.noticeAiError(errMsg));
         return null;
       }
       const msg = res.json?.choices?.[0]?.message;
@@ -933,6 +969,79 @@ export default class RepoNotesPlugin extends Plugin {
       return text;
     } catch (e) {
       console.error("[repo-notes] OpenAI-compatible API request failed:", e);
+      new Notice(this.t.noticeAiError((e as Error).message));
+      return null;
+    }
+  }
+
+  private async summarizeReadmeOpenAINative(readmeText: string, repoName: string): Promise<string | null> {
+    if (!this.settings.openaiApiKey) return null;
+    const lang = this.settings.readmeSummaryLang === "ja" ? "日本語" : "English";
+    try {
+      const res = await requestUrl({
+        url: "https://api.openai.com/v1/chat/completions",
+        method: "POST",
+        throw: false,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.settings.openaiApiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: this.settings.openaiModel || "gpt-4o-mini",
+          max_tokens: 400,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a concise summarizer. Output only the final summary. No thinking, no preamble, no explanation.",
+            },
+            {
+              role: "user",
+              content: `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. Reply only in ${lang}.\n\n---\n${readmeText}`,
+            },
+          ],
+        }),
+      });
+      if (res.status !== 200) {
+        const errMsg = res.json?.error?.message ?? JSON.stringify(res.json);
+        console.error(`[repo-notes] OpenAI API error: status=${res.status} message=${errMsg}`);
+        new Notice(this.t.noticeAiError(errMsg));
+        return null;
+      }
+      return res.json?.choices?.[0]?.message?.content ?? null;
+    } catch (e) {
+      console.error("[repo-notes] OpenAI API request failed:", e);
+      new Notice(this.t.noticeAiError((e as Error).message));
+      return null;
+    }
+  }
+
+  private async summarizeReadmeGemini(readmeText: string, repoName: string): Promise<string | null> {
+    if (!this.settings.geminiApiKey) return null;
+    const lang = this.settings.readmeSummaryLang === "ja" ? "日本語" : "English";
+    const model = this.settings.geminiModel || "gemini-2.0-flash";
+    const prompt = `Summarize the following README for GitHub repository "${repoName}" in ${lang}, in 3-5 sentences. Include what the tool/library does, key features, and target users. No preamble.\n\n---\n${readmeText}`;
+    try {
+      const res = await requestUrl({
+        url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.settings.geminiApiKey.trim()}`,
+        method: "POST",
+        throw: false,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 400 },
+        }),
+      });
+      if (res.status !== 200) {
+        const errMsg = res.json?.error?.message ?? JSON.stringify(res.json);
+        console.error(`[repo-notes] Gemini API error: status=${res.status} message=${errMsg}`);
+        new Notice(this.t.noticeAiError(errMsg));
+        return null;
+      }
+      return res.json?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    } catch (e) {
+      console.error("[repo-notes] Gemini API request failed:", e);
+      new Notice(this.t.noticeAiError((e as Error).message));
       return null;
     }
   }
@@ -957,6 +1066,35 @@ export default class RepoNotesPlugin extends Plugin {
     if (res.status !== 200) throw new Error(`status ${res.status}`);
     const data: Array<{ id: string }> = res.json?.data ?? [];
     return data.map((m) => m.id).sort();
+  }
+
+  async fetchOpenAIModels(): Promise<string[]> {
+    if (!this.settings.openaiApiKey) throw new Error("No API key");
+    const res = await requestUrl({
+      url: "https://api.openai.com/v1/models",
+      method: "GET",
+      headers: { authorization: `Bearer ${this.settings.openaiApiKey.trim()}` },
+    });
+    if (res.status !== 200) throw new Error(`status ${res.status}`);
+    const data: Array<{ id: string }> = res.json?.data ?? [];
+    return data
+      .map((m) => m.id)
+      .filter((id) => id.startsWith("gpt-") || id.startsWith("o1") || id.startsWith("o3") || id.startsWith("o4"))
+      .sort();
+  }
+
+  async fetchGeminiModels(): Promise<string[]> {
+    if (!this.settings.geminiApiKey) throw new Error("No API key");
+    const res = await requestUrl({
+      url: `https://generativelanguage.googleapis.com/v1beta/models?key=${this.settings.geminiApiKey.trim()}`,
+      method: "GET",
+    });
+    if (res.status !== 200) throw new Error(`status ${res.status}`);
+    const models: Array<{ name: string; supportedGenerationMethods: string[] }> = res.json?.models ?? [];
+    return models
+      .filter((m) => m.supportedGenerationMethods.indexOf("generateContent") !== -1)
+      .map((m) => m.name.replace(/^models\//, ""))
+      .sort();
   }
 
   // ─── Note Builder ────────────────────────────────────────────────────────────
@@ -1000,11 +1138,18 @@ export function resolveUiLang(uiLang: "auto" | Lang, momentLocale: string): Lang
 }
 
 export function checkCanSummarize(
-  settings: Pick<RepoNotesSettings, "summaryProvider" | "summaryBaseUrl" | "summaryModel" | "anthropicApiKey">
+  settings: Pick<RepoNotesSettings, "summaryProvider" | "summaryBaseUrl" | "summaryModel" | "anthropicApiKey" | "geminiApiKey" | "openaiApiKey">
 ): boolean {
-  return settings.summaryProvider === "openai-compatible"
-    ? !!(settings.summaryBaseUrl && settings.summaryModel)
-    : !!settings.anthropicApiKey;
+  if (settings.summaryProvider === "openai-compatible") {
+    return !!(settings.summaryBaseUrl && settings.summaryModel);
+  }
+  if (settings.summaryProvider === "gemini") {
+    return !!settings.geminiApiKey;
+  }
+  if (settings.summaryProvider === "openai") {
+    return !!settings.openaiApiKey;
+  }
+  return !!settings.anthropicApiKey;
 }
 
 export function extractMemo(content: string): string {
@@ -1564,14 +1709,16 @@ class RepoNotesSettingTab extends PluginSettingTab {
       .setName(t.summaryProvider)
       .setDesc(t.summaryProviderDesc)
       .addDropdown((d) =>
-        /* eslint-disable obsidianmd/ui/sentence-case -- proper nouns: Anthropic, OpenAI, Ollama, LM Studio, vLLM */
+        /* eslint-disable obsidianmd/ui/sentence-case -- proper nouns: Anthropic, OpenAI, Ollama, LM Studio, vLLM, Google Gemini */
         d
-          .addOption("anthropic", "Anthropic (Claude)")
+          .addOption("anthropic", "Anthropic API")
+          .addOption("gemini", "Google Gemini API")
+          .addOption("openai", "OpenAI API")
           .addOption("openai-compatible", "OpenAI-compatible (Ollama, LM Studio, vLLM...)")
           /* eslint-enable obsidianmd/ui/sentence-case */
           .setValue(this.plugin.settings.summaryProvider)
           .onChange(async (v) => {
-            this.plugin.settings.summaryProvider = v as "anthropic" | "openai-compatible";
+            this.plugin.settings.summaryProvider = v as "anthropic" | "openai-compatible" | "gemini" | "openai";
             await this.plugin.saveSettings();
             this.display();
           })
@@ -1709,6 +1856,112 @@ class RepoNotesSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }
       );
+    }
+    if (this.plugin.settings.summaryProvider === "gemini") {
+      this.addApiKeySetting(
+        containerEl,
+        t.geminiKey,
+        t.geminiKeyDesc,
+        t.geminiKeyPlaceholder,
+        () => this.plugin.settings.geminiApiKey,
+        async (v) => {
+          this.plugin.settings.geminiApiKey = v;
+          await this.plugin.saveSettings();
+        }
+      );
+      const geminiModelSetting = new Setting(containerEl).setName(t.geminiModel).setDesc(t.geminiModelDesc);
+      const renderGeminiModelControl = (models: string[] | null) => {
+        geminiModelSetting.controlEl.empty();
+        if (models && models.length > 0) {
+          new DropdownComponent(geminiModelSetting.controlEl)
+            .addOptions(Object.fromEntries(models.map((m) => [m, m])))
+            .setValue(this.plugin.settings.geminiModel || models[0])
+            .onChange(async (v) => {
+              this.plugin.settings.geminiModel = v;
+              await this.plugin.saveSettings();
+            });
+        } else {
+          new TextComponent(geminiModelSetting.controlEl)
+            // eslint-disable-next-line obsidianmd/ui/sentence-case -- model identifier, not UI text
+            .setPlaceholder("gemini-2.0-flash")
+            .setValue(this.plugin.settings.geminiModel)
+            .onChange(async (v) => {
+              this.plugin.settings.geminiModel = v.trim();
+              await this.plugin.saveSettings();
+            });
+        }
+        const btn = geminiModelSetting.controlEl.createEl("button", {
+          text: t.summaryModelFetch,
+          cls: "repo-notes-model-btn",
+        });
+        btn.addEventListener("click", () => {
+          void (async () => {
+            btn.disabled = true;
+            btn.setText(t.summaryModelFetching);
+            try {
+              const fetched = await this.plugin.fetchGeminiModels();
+              renderGeminiModelControl(fetched);
+            } catch (e) {
+              console.error("[repo-notes] fetchGeminiModels failed:", e);
+              renderGeminiModelControl(null);
+            }
+          })();
+        });
+      };
+      renderGeminiModelControl(null);
+    }
+    if (this.plugin.settings.summaryProvider === "openai") {
+      this.addApiKeySetting(
+        containerEl,
+        t.openaiKey,
+        t.openaiKeyDesc,
+        t.openaiKeyPlaceholder,
+        () => this.plugin.settings.openaiApiKey,
+        async (v) => {
+          this.plugin.settings.openaiApiKey = v;
+          await this.plugin.saveSettings();
+        }
+      );
+      const openaiModelSetting = new Setting(containerEl).setName(t.openaiModel).setDesc(t.openaiModelDesc);
+      const renderOpenAIModelControl = (models: string[] | null) => {
+        openaiModelSetting.controlEl.empty();
+        if (models && models.length > 0) {
+          new DropdownComponent(openaiModelSetting.controlEl)
+            .addOptions(Object.fromEntries(models.map((m) => [m, m])))
+            .setValue(this.plugin.settings.openaiModel || models[0])
+            .onChange(async (v) => {
+              this.plugin.settings.openaiModel = v;
+              await this.plugin.saveSettings();
+            });
+        } else {
+          new TextComponent(openaiModelSetting.controlEl)
+            // eslint-disable-next-line obsidianmd/ui/sentence-case -- model identifier, not UI text
+            .setPlaceholder("gpt-4o-mini")
+            .setValue(this.plugin.settings.openaiModel)
+            .onChange(async (v) => {
+              this.plugin.settings.openaiModel = v.trim();
+              await this.plugin.saveSettings();
+            });
+        }
+        const btn = openaiModelSetting.controlEl.createEl("button", {
+          text: t.summaryModelFetch,
+          cls: "repo-notes-model-btn",
+        });
+        btn.addEventListener("click", () => {
+          void (async () => {
+            btn.disabled = true;
+            btn.setText(t.summaryModelFetching);
+            try {
+              const fetched = await this.plugin.fetchOpenAIModels();
+              renderOpenAIModelControl(fetched);
+            } catch (e) {
+              console.error("[repo-notes] fetchOpenAIModels failed:", e);
+              renderOpenAIModelControl(null);
+            }
+          })();
+        });
+      };
+      renderOpenAIModelControl(null);
     }
     new Setting(containerEl).setName(t.summaryLang).addDropdown((d) =>
       d
