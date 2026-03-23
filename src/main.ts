@@ -307,14 +307,8 @@ export default class RepoNotesPlugin extends Plugin {
     if (!this.settings.anthropicModel) {
       this.settings.anthropicModel = "claude-haiku-4-5-20251001";
     }
-    if (!this.settings.geminiApiKey) {
-      this.settings.geminiApiKey = "";
-    }
     if (!this.settings.geminiModel) {
       this.settings.geminiModel = "gemini-2.0-flash";
-    }
-    if (!this.settings.openaiApiKey) {
-      this.settings.openaiApiKey = "";
     }
     if (!this.settings.openaiModel) {
       this.settings.openaiModel = "gpt-4o-mini";
