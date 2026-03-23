@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.2 (2026-03-23)
+
+## What's Changed
+* chore: CHANGELOG.mdを1.1.1に更新 by @github-actions[bot] in https://github.com/tak-labo/obsidian-repo-notes/pull/47
+* Add Google Gemini API and OpenAI API support for README summarization by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/48
+* Bump version to 1.1.2-beta.1 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/49
+* Bump version to 1.1.2 by @tak-labo in https://github.com/tak-labo/obsidian-repo-notes/pull/50
+
+
+**Full Changelog**: https://github.com/tak-labo/obsidian-repo-notes/compare/1.1.1...1.1.2
+
+---
+
+
 ## 1.1.1 (2026-03-22)
 
 ## What's Changed
