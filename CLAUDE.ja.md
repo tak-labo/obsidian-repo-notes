@@ -4,7 +4,7 @@
 
 ## このプロジェクトについて
 
-GitHub のスター済みリポジトリ・自分のリポジトリ・Organization のリポジトリを、YAML フロントマター付きの構造化された Markdown ノートとして Obsidian にインポートする **Obsidian プラグイン**。Anthropic Claude または OpenAI 互換 API（Ollama, LM Studio, vLLM など）による AI README 要約機能あり。
+GitHub のスター済みリポジトリ・自分のリポジトリ・Organization のリポジトリを、YAML フロントマター付きの構造化された Markdown ノートとして Obsidian にインポートする **Obsidian プラグイン**。Anthropic API、Google Gemini API、OpenAI API、または OpenAI 互換 API（Ollama, LM Studio, vLLM など）による AI README 要約機能あり。
 
 ## コマンド
 
@@ -46,13 +46,13 @@ ln -s $(pwd) /path/to/vault/.obsidian/plugins/repo-notes
 
 - **`window.moment` へのアクセス**は `(window as Window & { moment?: { locale?: () => string } })` で型付けすること。`as any` は禁止。
 
-- **CSSスタイルの直接指定禁止**: `element.style.*` は使わず、CSSクラス（`addClass/removeClass`）か `setCssProps({ "--var": val })` を使う。CSSクラス名は `repo-notes-` プレフィックス必須。
+- **CSSスタイルの直接指定禁止**: `element.style.*` は使わず、CSSクラス（`addClass/removeClass`）か `setCssProps({ "--var": val })` を使う。CSSクラス命名: UI要素は `repo-notes-` プレフィックス、SyncModal のプログレス表示コンポーネントは `gs-` プレフィックスを使用。
 
 - **i18n**: `src/i18n.ts` の `getT(lang: Lang): T` で翻訳オブジェクトを取得する。プラグインの `get t()` は `resolveUiLang(this.settings.uiLang, momentLocale)` を通じて言語を解決する。`uiLang` は `"auto" | "en" | "ja"` で、`"auto"` のときは `window.moment.locale()` でObsidianのロケールを動的検出する。
 
 - **設定マイグレーション**: `loadSettings()` に旧シングルアカウント形式から `profiles[]` 配列形式へのマイグレーションロジックがある。新しい設定フィールドを追加する際は同様にマイグレーションを考慮すること。新フィールドが `data.json` に存在しない場合のデフォルト補完も必要。
 
-- **AIプロバイダー**: `summaryProvider: "anthropic" | "openai-compatible"` で切り替える。`summarizeReadme()` がディスパッチャーとなり、`summarizeReadmeAnthropic()` または `summarizeReadmeOpenAI()` を呼ぶ。OpenAI互換は `/v1/chat/completions` エンドポイントを使用。`checkCanSummarize()` で要約可能かを判定。
+- **AIプロバイダー**: `summaryProvider: "anthropic" | "openai-compatible" | "gemini" | "openai"` で切り替える。`summarizeReadme()` がディスパッチャーとなり、対応する関数（`summarizeReadmeAnthropic`, `summarizeReadmeOpenAI`, `summarizeReadmeGemini`, `summarizeReadmeOpenAINative`）を呼ぶ。`checkCanSummarize()` で要約可能かを判定 — `anthropic`/`gemini`/`openai` は APIキーが必要、`openai-compatible` はベースURLとモデルが必要。
 
 - **Sync と AI要約の責務分離**: `syncCurrentNote()` は AI を呼ばない。既存の `## Summary` セクションを `extractSummary()` で読み取って保持する。`summarizeCurrentNote()` は GitHub からリポジトリメタデータを再取得しない。フロントマターから `GitHubRepo` オブジェクトを再構築し、README のフェッチと AI のみ実行する。APIコストを予測可能に保つための設計。
 

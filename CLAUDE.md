@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Obsidian plugin** that imports GitHub starred repositories, own repositories, and organization repos as structured Markdown notes with YAML frontmatter. Supports AI-powered README summarization via Anthropic Claude or any OpenAI-compatible API (Ollama, LM Studio, vLLM, etc.).
+**Obsidian plugin** that imports GitHub starred repositories, own repositories, and organization repos as structured Markdown notes with YAML frontmatter. Supports AI-powered README summarization via Anthropic API, Google Gemini API, OpenAI API, or any OpenAI-compatible API (Ollama, LM Studio, vLLM, etc.).
 
 ## Commands
 
@@ -46,13 +46,13 @@ Two source files:
 
 - **Accessing `window.moment`**: type as `(window as Window & { moment?: { locale?: () => string } })`. `as any` is forbidden.
 
-- **Never set CSS styles directly**: avoid `element.style.*`. Use CSS classes (`addClass/removeClass`) or `setCssProps({ "--var": val })`. All CSS class names must use the `repo-notes-` prefix.
+- **Never set CSS styles directly**: avoid `element.style.*`. Use CSS classes (`addClass/removeClass`) or `setCssProps({ "--var": val })`. CSS class naming: `repo-notes-` prefix for UI elements, `gs-` prefix for SyncModal progress components.
 
 - **i18n**: Use `getT(lang: Lang): T` from `src/i18n.ts`. The plugin's `get t()` resolves the language via `resolveUiLang(this.settings.uiLang, momentLocale)`. `uiLang` is `"auto" | "en" | "ja"`. When `"auto"`, Obsidian's locale is detected dynamically via `window.moment.locale()`.
 
 - **Settings migration**: `loadSettings()` contains migration logic from the old single-account format to the `profiles[]` array format. When adding new settings fields, handle migration similarly. Also ensure missing fields are filled with defaults.
 
-- **AI providers**: Switch via `summaryProvider: "anthropic" | "openai-compatible"`. `summarizeReadme()` dispatches to `summarizeReadmeAnthropic()` or `summarizeReadmeOpenAI()`. OpenAI-compatible uses the `/v1/chat/completions` endpoint. Use `checkCanSummarize()` to determine if summarization is available.
+- **AI providers**: Switch via `summaryProvider: "anthropic" | "openai-compatible" | "gemini" | "openai"`. `summarizeReadme()` dispatches to the corresponding function (`summarizeReadmeAnthropic`, `summarizeReadmeOpenAI`, `summarizeReadmeGemini`, `summarizeReadmeOpenAINative`). Use `checkCanSummarize()` to determine if summarization is available — requires API key for `anthropic`/`gemini`/`openai`, base URL + model for `openai-compatible`.
 
 - **Sync vs. AI summarize separation**: `syncCurrentNote()` never calls AI — it preserves the existing `## Summary` section via `extractSummary()`. `summarizeCurrentNote()` never re-fetches repo metadata from GitHub — it reconstructs the `GitHubRepo` object from the note's frontmatter and only fetches the README for AI. This keeps API costs predictable.
 
